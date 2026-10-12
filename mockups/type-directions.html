@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@700;900&family=Geist+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.45 Inter, system-ui, sans-serif; }
+  .row { display:grid; grid-template-columns: 1fr; gap:14px; margin-bottom:16px; }
+  .dir { background:#111; color:#f0f0f0; border:1px solid #2a2a2a; border-radius:20px; padding:18px; }
+  .head { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+  .head b { font:600 17px Inter, sans-serif; letter-spacing:-.01em; }
+  .head span { font:500 11px 'Geist Mono', monospace; color:#8a8a8a; text-transform:uppercase; letter-spacing:.05em; }
+  .screens { display:flex; gap:14px; flex-wrap:wrap; }
+  .bezel { width:178px; height:178px; border-radius:50%; background:#1c1c1c; padding:6px; box-shadow:inset 0 0 0 1px #3a3a3a; }
+  canvas { width:166px; height:166px; border-radius:50%; display:block; }
+  p.note { margin:12px 0 0; color:#b5b5b4; font-size:13.5px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<svg width="0" height="0" style="position:absolute">
+  <path id="flame" d="M279.074,42.499C293.511,41.019 290.884,62.572 310.836,81.573C330.787,100.574 343.84,93.301 354.993,120.442C366.145,147.583 338.821,194.392 352.874,212.728C366.927,231.065 384.574,217.078 400.03,249.102C415.486,281.126 395.274,304.778 388.646,329.136C382.018,353.493 400.205,369.389 375.503,406.793C350.801,444.197 292.874,454.488 256.231,459.455C219.589,464.423 170.001,437.843 141.445,406.802C112.888,375.762 104.898,336.966 106.798,321.724C108.698,306.482 113.311,309.537 120.792,299.483C128.272,289.429 116.02,272.216 116.324,256C116.628,239.784 118.081,229.9 130.308,207.118C142.536,184.336 150.074,211.818 165.021,192.432C174.269,180.436 178.045,153.463 185.098,138.152C192.152,122.841 199.917,118.801 207.881,119.485C215.844,120.169 219.284,127.766 229.084,122.707C238.884,117.648 248.227,99.435 255.21,78.546C262.193,57.657 267.462,43.69 279.074,42.499Z"/>
+  <path id="hl" d="M289,109C291.405,115.002 296.224,116.345 302,118C307.776,119.655 314.584,123.498 318,129.55C321.416,135.603 323.353,139.878 322.472,149.109"/>
+</svg>
+<script>
+const S = 466, N = 64, CORAL = '#f77448', INK = '#151410', CREAM = '#fbf0d9';
+const UI = '#f0f0f0', DIM = '#8a8a8a', LOW = '#ff5a4f';
+const MONO = "'Geist Mono', monospace", SANS = "Inter, sans-serif";
+function sample(id, n, closed) { const p = document.getElementById(id), L = p.getTotalLength(), o = []; for (let i = 0; i < n; i++) { const q = p.getPointAtLength(L * i / (closed ? n : n - 1)); o.push([q.x, q.y]); } return o; }
+const REST = sample('flame', N, true), HL = sample('hl', 8, false);
+function rand(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+
+const DIRS = [
+  { key:'inter', name:'A. Inter, tight lowercase', tag:'heyclicky headline style',
+    note:'What heyclicky actually uses for "heyclicky": bold Inter, lowercase, tight tracking. Clean and friendly, and it reads instantly at badge distance.',
+    head: (px) => `700 ${px}px ${SANS}`, track: -0.045, lower: true },
+  { key:'doto', name:'B. Dot matrix (Doto)', tag:'Nothing / LED sign',
+    note:'Each letter is made of round dots, so it glows on black AMOLED like an LED panel. Very "device", and it pairs well with a pet.',
+    head: (px) => `900 ${px}px Doto`, track: 0, lower: true },
+  { key:'pixel', name:'C. Pixel (Silkscreen)', tag:'classic Tamagotchi LCD',
+    note:'Straight from the 1996 egg. The most nostalgic option. Gets loud at large sizes, so headlines stay short.',
+    head: (px) => `400 ${Math.round(px * 0.62)}px Silkscreen`, track: 0, lower: false },
+  { key:'mono', name:'D. All Geist Mono', tag:'rabbit r1 / terminal agent',
+    note:'One typeface everywhere, bold for headlines. Reads as "AI agent" more than "toy". The most minimal option.',
+    head: (px) => `700 ${Math.round(px * 0.72)}px ${MONO}`, track: -0.02, lower: true },
+];
+
+const SCREENS = [
+  { k:'name', h:'akhilesh', sub:'Engineer at Charming', label:'HELLO, I’M' },
+  { k:'say',  h:'feed me', sub:'it’s been 6 hours', label:'FOOD 12%' },
+  { k:'gone', h:'gone exploring', sub:'come find me?', label:'HOLD A TO CALL' },
+];
+
+function shape(t, seed, s, cx, cy) {
+  const br = Math.sin(t / 650) * 0.022, sx = 1 - br * 0.6, sy = 1 + br, r = rand(seed);
+  return REST.map(([x, y]) => {
+    let nx = 256 + (x - 256) * sx, ny = 459 + (y - 459) * sy;
+    if (y < 170) nx += Math.sin(t / 160 + y / 30) * 7 * (170 - y) / 128;
+    nx += (r() - .5) * 2.2; ny += (r() - .5) * 2.2;
+    return [cx + (nx - 256) * s, cy + (ny - 256) * s];
+  });
+}
+function smooth(ctx, pts) { const n = pts.length, m = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; ctx.beginPath(); let st = m(pts[n - 1], pts[0]); ctx.moveTo(...st); for (let i = 0; i < n; i++) { const e = m(pts[i], pts[(i + 1) % n]); ctx.quadraticCurveTo(pts[i][0], pts[i][1], e[0], e[1]); } ctx.closePath(); }
+function mascot(ctx, t, seed, s, cx, cy, blink) {
+  ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.beginPath(); ctx.ellipse(cx, cy + 206 * s, 120 * s, 14 * s, 0, 0, Math.PI * 2); ctx.fill();
+  const p = shape(t, seed, s, cx, cy); smooth(ctx, p); ctx.fillStyle = CORAL; ctx.fill();
+  ctx.lineJoin = 'round'; ctx.lineWidth = 14 * s; ctx.strokeStyle = INK; ctx.stroke();
+  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(251,240,217,.35)'; ctx.stroke();
+  ctx.beginPath(); HL.forEach(([x, y], i) => { const X = cx + (x - 256) * s, Y = cy + (y - 256) * s; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+  ctx.lineWidth = 12 * s; ctx.lineCap = 'round'; ctx.strokeStyle = CREAM; ctx.stroke();
+  const fy = cy + 12 * s - 6 * s, h = blink ? 0.5 : 13 * s; ctx.strokeStyle = INK; ctx.lineWidth = 18 * s;
+  [-21, 21].forEach(d => { ctx.beginPath(); ctx.moveTo(cx + 4 * s + d * s, fy - h / 2); ctx.lineTo(cx + 4 * s + d * s, fy + h / 2); ctx.stroke(); });
+}
+function headline(ctx, dir, text, px, y) {
+  ctx.font = dir.head(px); ctx.letterSpacing = (dir.track * px) + 'px';
+  const str = dir.lower ? text.toLowerCase() : text.toUpperCase();
+  let w = ctx.measureText(str).width, size = px;
+  while (w > 330 && size > 20) { size -= 2; ctx.font = dir.head(size); ctx.letterSpacing = (dir.track * size) + 'px'; w = ctx.measureText(str).width; }
+  ctx.fillText(str, 233, y); ctx.letterSpacing = '0px';
+}
+function draw(ctx, dir, sc, t, seed) {
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, S, S); ctx.textAlign = 'center';
+  const blink = (t % 3800) < 140;
+  if (sc.k === 'gone') {
+    ctx.fillStyle = 'rgba(255,255,255,.3)';
+    for (let i = 0; i < 7; i++) { const x = 90 + i * 46, y = 340 - Math.sin(i * 0.9) * 26 + (i % 2 ? 12 : -12); ctx.beginPath(); ctx.ellipse(x, y, 9, 6, 0.3, 0, Math.PI * 2); ctx.fill(); }
+  } else mascot(ctx, t, seed, 0.3, 233, 378, blink);
+  ctx.fillStyle = sc.k === 'say' ? LOW : DIM; ctx.font = `500 15px ${MONO}`; ctx.fillText(sc.label, 233, 112);
+  ctx.fillStyle = UI; headline(ctx, dir, sc.h, 78, 190);
+  ctx.fillStyle = '#b5b5b4'; ctx.font = `400 21px ${SANS}`; ctx.fillText(sc.sub, 233, 236);
+}
+
+const root = document.getElementById('root'), all = [];
+DIRS.forEach(dir => {
+  const el = document.createElement('div'); el.className = 'dir';
+  el.innerHTML = `<div class="head"><b>${dir.name}</b><span>${dir.tag}</span></div><div class="screens"></div><p class="note">${dir.note}</p>`;
+  root.appendChild(el);
+  SCREENS.forEach((sc, i) => {
+    const b = document.createElement('div'); b.className = 'bezel'; b.innerHTML = `<canvas width="${S}" height="${S}"></canvas>`;
+    el.querySelector('.screens').appendChild(b);
+    all.push({ ctx: b.querySelector('canvas').getContext('2d'), dir, sc, off: i * 900 });
+  });
+});
+function frame(t) { const seed = Math.floor(t / 110) % 9973 + 7; all.forEach(a => draw(a.ctx, a.dir, a.sc, t + a.off, seed)); requestAnimationFrame(frame); }
+Promise.all(['900 40px Doto', '400 40px Silkscreen', '700 40px "Geist Mono"', '500 15px "Geist Mono"', '700 40px Inter', '400 21px Inter'].map(f => document.fonts.load(f))).finally(() => requestAnimationFrame(frame));
+</script>
+</body>
+</html>
