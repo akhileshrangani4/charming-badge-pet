@@ -37,7 +37,7 @@ It's a real Tamagotchi with harsh rules. It gets hungry, makes messes, gets sick
 | **Rotate the badge** | It stays standing on real "down" |
 | **Shake** | Makes it dizzy, and it doesn't like that |
 
-The care menu has **FEED** (a meal), **SNACK**, **PLAY**, **CLEAN**, **MEDS** and **LIGHTS** (sleep or wake).
+The care menu has **FEED** (a meal), **SNACK**, **PLAY**, **CLEAN**, **MEDS**, **LIGHTS** (sleep or wake) and **COFFEE** (skip the tiredness: full energy right away, once every 3 hours).
 
 **PLAY** is a 10-second mini-game: tilt the badge to slide the mascot under falling sparks, and catch 3 to win.
 

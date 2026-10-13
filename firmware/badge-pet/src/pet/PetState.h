@@ -17,5 +17,7 @@ struct PetState {
   Life life = Life::Normal;
   uint8_t sick = 0, messes = 0, growth = 0, winbackNeeded = 0, winbackDone = 0;
   bool asleep = false, paused = false, tantrum = false, wokeThisNight = false;
+  // Fields added after save version 1 go below, so a v1 save is an exact prefix of this struct.
+  int64_t lastCoffeeMin = -100000;
 };
 }

@@ -7,7 +7,7 @@ enum : uint32_t {
   EV_ASLEEP = 1u << 4, EV_AWAKE = 1u << 5, EV_MESS = 1u << 6, EV_AUTO_UNPAUSE = 1u << 7,
   EV_GREW = 1u << 8, EV_WON_BACK = 1u << 9,
 };
-enum class Care : uint8_t { Meal, Snack, PlayWin, PlayLose, Clean, Medicine, Lights, Stroke, Shake };
+enum class Care : uint8_t { Meal, Snack, PlayWin, PlayLose, Clean, Medicine, Lights, Stroke, Shake, Coffee };
 bool isNight(int64_t m);
 PetState newPet(int64_t nowMin);
 uint32_t tickMinute(PetState& s);
@@ -17,4 +17,5 @@ void resyncClock(PetState& s, int64_t nowMin);
 uint32_t applyCare(PetState& s, Care c, int64_t nowMin);
 bool callBack(PetState& s, int64_t nowMin);
 bool togglePause(PetState& s, int64_t nowMin);
+bool coffeeReady(const PetState& s, int64_t nowMin);
 }

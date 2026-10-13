@@ -96,7 +96,7 @@ uint32_t tickMinute(PetState& s) {
 void resyncClock(PetState& s, int64_t nowMin) {
   const int64_t d = nowMin - s.lastMin;
   s.lastMin = nowMin;
-  s.lastStrokeMin += d; s.lastWinbackMin += d;
+  s.lastStrokeMin += d; s.lastWinbackMin += d; s.lastCoffeeMin += d;
   for (auto& t : s.snackMin) t += d;
 }
 
@@ -111,7 +111,8 @@ uint32_t catchUp(PetState& s, int64_t nowMin) {
 uint32_t applyCare(PetState& s, Care c, int64_t nowMin) {
   uint32_t ev = catchUp(s, nowMin);
   if (s.life == Life::Gone || s.paused) return ev;
-  if (s.asleep && c != Care::Lights && c != Care::Shake) return ev;
+  if (s.asleep && c != Care::Lights && c != Care::Shake && c != Care::Coffee) return ev;
+  if (c == Care::Coffee && !coffeeReady(s, nowMin)) return ev;
   const bool isCare = c != Care::Shake;
   if (isCare) {
     if (s.tantrum) { s.tantrum = false; s.spoil += SPOIL_STEP; s.discipline -= DISCIPLINE_LOSS; }
@@ -152,6 +153,10 @@ uint32_t applyCare(PetState& s, Care c, int64_t nowMin) {
         if (isNight(nowMin)) { s.joy -= NIGHT_WAKE_JOY; s.wokeThisNight = true; }
       } else { s.asleep = true; ev |= EV_ASLEEP; }
       break;
+    case Care::Coffee:
+      s.energy = 100; s.lastCoffeeMin = nowMin;
+      if (s.asleep) { s.asleep = false; ev |= EV_AWAKE; }
+      break;
     case Care::Shake:
       s.joy -= SHAKE_JOY; s.trust -= SHAKE_TRUST;
       if (s.asleep) {
@@ -191,6 +196,8 @@ bool callBack(PetState& s, int64_t nowMin) {
   s.sinceCareMin = 0; s.tantrum = false; s.calmWindowMin = 0; s.goneMin = 0;
   return true;
 }
+bool coffeeReady(const PetState& s, int64_t nowMin) { return nowMin - s.lastCoffeeMin >= COFFEE_COOLDOWN_MIN; }
+
 bool togglePause(PetState& s, int64_t nowMin) {
   catchUp(s, nowMin);
   if (s.paused) { s.paused = false; return false; }

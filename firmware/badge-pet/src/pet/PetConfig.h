@@ -22,4 +22,5 @@ constexpr int   STROKE_COOLDOWN_MIN = 2;
 constexpr float NEED_THRESHOLD = 30, TRUST_NEED_GAIN = 2, TRUST_CARE_GAIN = 0.5f;
 constexpr float SPOIL_STEP = 10, DISCIPLINE_LOSS = 5, DISCIPLINE_GAIN = 10;
 constexpr int   MAX_CATCHUP_MIN = 30 * 1440;
+constexpr int   COFFEE_COOLDOWN_MIN = 180;   // COFFEE refills energy, once every 3 hours
 }}

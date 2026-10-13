@@ -1,4 +1,5 @@
 #include "PowerMgr.h"
+#include "Haptics.h"
 #include <M5Unified.h>
 #include <esp_sleep.h>
 #include <esp_idf_version.h>
@@ -19,9 +20,10 @@ void PowerMgr::update(uint32_t ms) {
 }
 void PowerMgr::dimNow() { panel(); M5.Display.setBrightness(DIMMED); dimmed_ = true; }
 void PowerMgr::buzz(int pulses) {
-  for (int i = 0; i < pulses; i++) { M5.Power.setVibration(200); delay(120); M5.Power.setVibration(0); delay(120); }
+  haptics::pulse(120, (uint8_t)pulses);
 }
 void PowerMgr::sleepNow(uint32_t seconds) {
+  M5.Power.setVibration(0);   // a queued buzz must not keep the motor running through sleep
   const uint64_t mask = (1ULL << GPIO_NUM_1) | (1ULL << GPIO_NUM_2);   // buttons B and A, active low
   rtc_gpio_pullup_en(GPIO_NUM_1); rtc_gpio_pulldown_dis(GPIO_NUM_1);
   rtc_gpio_pullup_en(GPIO_NUM_2); rtc_gpio_pulldown_dis(GPIO_NUM_2);

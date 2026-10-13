@@ -2,13 +2,14 @@
 #include "../render/Effects.h"
 #include "../render/ContentView.h"
 #include "../render/Colors.h"
+#include "../power/Haptics.h"
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
 namespace scenes {
 using namespace render;
 using input::ButtonEvent;
-static const char* MENU_LABELS[] = {"FEED", "SNACK", "PLAY", "CLEAN", "MEDS", "LIGHTS"};
+static const char* MENU_LABELS[] = {"FEED", "SNACK", "PLAY", "CLEAN", "MEDS", "LIGHTS", "COFFEE"};
 
 static Expression exprFor(pet::Mood m) {
   switch (m) {
@@ -66,7 +67,7 @@ uint32_t Scenes::handle(const input::InputFrame& in, pet::PetState& s, int64_t n
         m_.poke(in.tapX, in.tapY);
         if (s.life == pet::Life::Returning || s.trust < 30) m_.setLook(in.tapX < CENTER ? 1.0f : -1.0f, 0);   // turns away
       }
-      if (in.stroke) { ev |= care(pet::Care::Stroke); happyUntil_ = ms + 3000; M5.Power.setVibration(90); delay(40); M5.Power.setVibration(0); }
+      if (in.stroke) { ev |= care(pet::Care::Stroke); happyUntil_ = ms + 3000; haptics::pulse(40, 1, 0, 90); }
       if (in.shake) { ev |= care(pet::Care::Shake); dizzyUntil_ = ms + 2000; }
       break;
     case SceneId::Menu:
@@ -78,6 +79,9 @@ uint32_t Scenes::handle(const input::InputFrame& in, pet::PetState& s, int64_t n
           case MenuItem::Clean:  ev |= care(pet::Care::Clean); break;
           case MenuItem::Meds:   ev |= care(pet::Care::Medicine); break;
           case MenuItem::Lights: ev |= care(pet::Care::Lights); break;
+          case MenuItem::Coffee:
+            if (!pet::coffeeReady(s, now)) { display::Content k; k.title = "NOT YET"; k.body = "one coffee every 3 hours"; k.ttlMs = 1800; showMessage(k, ms); return ev; }
+            ev |= care(pet::Care::Coffee); happyUntil_ = ms + 2000; break;
           case MenuItem::Play:
             if (s.asleep || s.life == pet::Life::Returning) { display::Content k; k.title = "HMPH."; k.ttlMs = 1500; showMessage(k, ms); }
             else { play_.start(ms); go(SceneId::Play, ms); }
@@ -158,14 +162,18 @@ Rect Scenes::draw(const pet::PetState& s, uint32_t ms) {
   m_.update(ms);
   // Clearing all 438 KB of PSRAM costs ~12 ms; clear only what this canvas drew last time unless the scene changed.
   if (full_) { needFull_[0] = needFull_[1] = true; full_ = false; }
-  const bool fullFrame = needFull_[slot_] || scene_ == SceneId::Menu;
+  const bool fullFrame = needFull_[slot_];
   if (fullFrame) c_->fillScreen(TFT_BLACK);
   else { const Rect clr = drawn_[slot_].padded(4).clippedEven(); if (!clr.empty()) c_->fillRect(clr.x, clr.y, clr.w, clr.h, TFT_BLACK); }
   Rect dirty;
+  // Static text and the gone screen are drawn only on full frames: each canvas keeps them, the
+  // mascot's clear area never reaches them, and not repainting them keeps the pushed area small.
   if (scene_ == SceneId::Gone) {
-    dirty = drawFootprints(*c_);
-    display::Content k; k.label = "HOLD A TO CALL"; k.title = "GONE"; k.body = "gone exploring. come find me?";
-    dirty = dirty.unite(drawContent(*c_, t_, k));
+    if (fullFrame) {
+      drawFootprints(*c_);
+      display::Content k; k.label = "HOLD A TO CALL"; k.title = "GONE"; k.body = "gone exploring. come find me?";
+      drawContent(*c_, t_, k);
+    }
   } else {
     dirty = m_.draw(*c_, ms);
     const Pose p = m_.pose();
@@ -175,15 +183,15 @@ Rect Scenes::draw(const pet::PetState& s, uint32_t ms) {
     if (e == Expression::Happy) dirty = dirty.unite(drawSparkles(*c_, p, ms));
     if (s.messes) dirty = dirty.unite(drawMesses(*c_, p, s.messes));
     if (mood == pet::Mood::Hungry && scene_ == SceneId::Pet) dirty = dirty.unite(drawFoodBubble(*c_, p));
-    if (scene_ == SceneId::Menu) drawMenu();
+    if (scene_ == SceneId::Menu && fullFrame) drawMenu();
     // Text areas count as dirty so they are cleared and pushed with the frame (live status bars, no
     // anti-aliased text drawn over itself where it meets the mascot's clear area).
     if (scene_ == SceneId::Status) dirty = dirty.unite(drawStatus(s));
-    if (scene_ == SceneId::NameTag) {
+    if (scene_ == SceneId::NameTag && fullFrame) {
       display::Content k; k.label = "HELLO, I'M"; k.title = "AKHILESH"; k.body = "Founding Engineer @Charming";
-      dirty = dirty.unite(drawContent(*c_, t_, k));
+      drawContent(*c_, t_, k);
     }
-    if (scene_ == SceneId::Message) dirty = dirty.unite(drawContent(*c_, t_, msg_));
+    if (scene_ == SceneId::Message && fullFrame) drawContent(*c_, t_, msg_);
     if (scene_ == SceneId::Play) dirty = dirty.unite(play_.drawSparks(*c_));
   }
   // The screen currently shows the other canvas's frame, so the push must cover both.

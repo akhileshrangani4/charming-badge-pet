@@ -9,7 +9,7 @@
 #include "PlayGame.h"
 namespace scenes {
 enum class SceneId : uint8_t { Pet, Menu, Status, NameTag, Message, Gone, Play };
-enum class MenuItem : uint8_t { Feed, Snack, Play, Clean, Meds, Lights, Count };
+enum class MenuItem : uint8_t { Feed, Snack, Play, Clean, Meds, Lights, Coffee, Count };
 class Scenes {
  public:
   Scenes(M5Canvas& c, render::TextLayer& t, render::Mascot& m) : c_(&c), t_(t), m_(m) {}

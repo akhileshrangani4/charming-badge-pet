@@ -8,6 +8,7 @@
 #include "../scenes/Scenes.h"
 #include "../store/Store.h"
 #include "../power/PowerMgr.h"
+#include "../power/Haptics.h"
 namespace app {
 static M5Canvas canvases[2] = {M5Canvas(&M5.Display), M5Canvas(&M5.Display)};
 static int slot = 0;
@@ -95,6 +96,7 @@ void App::setup() {
       const uint32_t until = millis() + 5000;   // brief glance at the pet, then back to sleep
       while (millis() < until) {
         M5.update();
+        haptics::update(millis());
         ui.setTarget(canvases[slot], slot);
         submit(canvases[slot], ui.draw(pet_, millis()));
         slot ^= 1;
@@ -156,8 +158,12 @@ void App::loop() {
   const input::InputFrame f = in.poll(ms);
   ev |= ui.handle(f, pet_, now(), ms);
   if (ev) ui.onEvents(ev, pet_, ms);
-  if (ev || ui.cared) { st.save(pet_); lastSaveMs_ = ms; ui.cared = false; }
-  if (ms - lastSaveMs_ > 5 * 60 * 1000) { st.save(pet_); lastSaveMs_ = ms; }
+  // A flash write stalls both cores for a moment, so batch saves: at most every 30 s after a
+  // change, every 5 min regardless, and always right before sleeping.
+  static bool unsaved = false;
+  if (ev || ui.cared) { unsaved = true; ui.cared = false; }
+  if ((unsaved && ms - lastSaveMs_ > 30000) || ms - lastSaveMs_ > 5 * 60 * 1000) { st.save(pet_); lastSaveMs_ = ms; unsaved = false; }
+  haptics::update(ms);
   if (f.any) pwr.activity(ms);
   pwr.update(ms);
   if (ev & (pet::EV_AUTO_UNPAUSE | pet::EV_SICK | pet::EV_SICKER | pet::EV_TANTRUM | pet::EV_RAN_AWAY)) pwr.buzz(1);
