@@ -14,6 +14,11 @@ static void clampAll(PetState& s) {
 static bool anyZero(const PetState& s) { return s.food <= 0 || s.energy <= 0 || s.joy <= 0 || s.hygiene <= 0; }
 static bool allZero(const PetState& s) { return s.food <= 0 && s.energy <= 0 && s.joy <= 0 && s.hygiene <= 0; }
 
+static float rand01(PetState& s) {
+  uint32_t x = s.rng; x ^= x << 13; x ^= x >> 17; x ^= x << 5; s.rng = x;
+  return (x >> 8) * (1.0f / 16777216.0f);
+}
+
 bool isNight(int64_t m) { const int h = hourOf(m); return h >= NIGHT_START_H || h < NIGHT_END_H; }
 
 PetState newPet(int64_t nowMin) {
@@ -27,6 +32,18 @@ uint32_t tickMinute(PetState& s) {
   uint32_t ev = 0;
   s.lastMin++;
   if (s.life == Life::Gone) { s.goneMin++; return ev; }
+  const int64_t m = s.lastMin;
+  if (s.paused) {
+    s.pauseBudget -= 1;
+    if (s.pauseBudget > 0) return ev;
+    s.pauseBudget = 0; s.paused = false; ev |= EV_AUTO_UNPAUSE;
+  } else {
+    s.pauseBudget = std::min(PAUSE_BUDGET_MIN, s.pauseBudget + PAUSE_REFILL_PER_MIN);
+  }
+  const bool night = isNight(m), wasNight = isNight(m - 1);
+  if (night && !wasNight && !s.asleep) { s.asleep = true; ev |= EV_ASLEEP; }
+  if (!night && wasNight) { if (s.asleep) ev |= EV_AWAKE; s.asleep = false; s.wokeThisNight = false; }
+  if (s.asleep && !night && s.energy >= 100) { s.asleep = false; ev |= EV_AWAKE; }
   const float f = s.asleep ? SLEEP_DECAY : 1.0f;
   const float k = s.sick ? SICK_DECAY : 1.0f;
   s.food    -= 100.0f / FOOD_EMPTY_MIN * f * k;
@@ -58,6 +75,21 @@ uint32_t tickMinute(PetState& s) {
     s.trust = std::min(s.trust, RETURN_TRUST_CAP);
     return ev | EV_RAN_AWAY;
   }
+  if (s.tantrum) {
+    if (++s.tantrumMin >= TANTRUM_IGNORE_MIN) { s.tantrum = false; s.calmWindowMin = CALM_WINDOW_MIN; }
+  } else {
+    if (s.calmWindowMin > 0) s.calmWindowMin--;
+    const bool fine = s.food > TANTRUM_OK_STAT && s.joy > TANTRUM_OK_STAT &&
+                      s.hygiene > TANTRUM_OK_STAT && s.energy > TANTRUM_OK_STAT;
+    if (!s.asleep && !s.sick && s.life == Life::Normal && fine) {
+      const float p = TANTRUM_PER_MIN * (1 + s.spoil / 50.0f) * std::max(0.1f, 1 - s.discipline / 150.0f);
+      if (rand01(s) < p) { s.tantrum = true; s.tantrumMin = 0; ev |= EV_TANTRUM; }
+    }
+  }
+  s.ageMin++;
+  if (s.growth < 3 && s.ageMin >= (uint32_t)GROWTH_DAYS[s.growth] * 1440u && s.trust >= GROWTH_TRUST) {
+    s.growth++; ev |= EV_GREW;
+  }
   return ev;
 }
 
@@ -74,6 +106,10 @@ uint32_t applyCare(PetState& s, Care c, int64_t nowMin) {
   if (s.life == Life::Gone || s.paused) return ev;
   if (s.asleep && c != Care::Lights && c != Care::Shake) return ev;
   const bool isCare = c != Care::Shake;
+  if (isCare) {
+    if (s.tantrum) { s.tantrum = false; s.spoil += SPOIL_STEP; s.discipline -= DISCIPLINE_LOSS; }
+    else if (s.calmWindowMin > 0) { s.discipline += DISCIPLINE_GAIN; s.spoil -= SPOIL_STEP / 2; s.calmWindowMin = 0; }
+  }
   const bool need = s.food < NEED_THRESHOLD || s.joy < NEED_THRESHOLD || s.hygiene < NEED_THRESHOLD ||
                     s.energy < NEED_THRESHOLD || s.sick || s.messes > 0;
   switch (c) {
@@ -96,8 +132,25 @@ uint32_t applyCare(PetState& s, Care c, int64_t nowMin) {
     case Care::Stroke:
       if (nowMin - s.lastStrokeMin >= STROKE_COOLDOWN_MIN) { s.joy += STROKE_JOY; s.lastStrokeMin = nowMin; }
       break;
+    case Care::PlayWin:
+    case Care::PlayLose:
+      if (s.life != Life::Returning) {
+        s.joy += c == Care::PlayWin ? PLAY_WIN_JOY : PLAY_LOSE_JOY;
+        s.energy -= PLAY_ENERGY;
+      }
+      break;
+    case Care::Lights:
+      if (s.asleep) {
+        s.asleep = false; ev |= EV_AWAKE;
+        if (isNight(nowMin)) { s.joy -= NIGHT_WAKE_JOY; s.wokeThisNight = true; }
+      } else { s.asleep = true; ev |= EV_ASLEEP; }
+      break;
     case Care::Shake:
       s.joy -= SHAKE_JOY; s.trust -= SHAKE_TRUST;
+      if (s.asleep) {
+        s.asleep = false; ev |= EV_AWAKE;
+        if (isNight(nowMin)) { s.joy -= NIGHT_WAKE_JOY; s.wokeThisNight = true; }
+      }
       break;
     default:
       break;
@@ -131,5 +184,11 @@ bool callBack(PetState& s, int64_t nowMin) {
   s.sinceCareMin = 0; s.tantrum = false; s.calmWindowMin = 0; s.goneMin = 0;
   return true;
 }
-bool togglePause(PetState&, int64_t) { return false; }
+bool togglePause(PetState& s, int64_t nowMin) {
+  catchUp(s, nowMin);
+  if (s.paused) { s.paused = false; return false; }
+  if (s.life == Life::Gone || s.pauseBudget < 1) return false;
+  s.paused = true;
+  return true;
+}
 }
