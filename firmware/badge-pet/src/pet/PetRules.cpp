@@ -93,8 +93,15 @@ uint32_t tickMinute(PetState& s) {
   return ev;
 }
 
+void resyncClock(PetState& s, int64_t nowMin) {
+  const int64_t d = nowMin - s.lastMin;
+  s.lastMin = nowMin;
+  s.lastStrokeMin += d; s.lastWinbackMin += d;
+  for (auto& t : s.snackMin) t += d;
+}
+
 uint32_t catchUp(PetState& s, int64_t nowMin) {
-  if (nowMin < s.lastMin) { s.lastMin = nowMin; return 0; }        // clock went backwards: resync, simulate nothing
+  if (nowMin < s.lastMin) { resyncClock(s, nowMin); return 0; }   // clock went backwards: resync, simulate nothing
   if (nowMin - s.lastMin > MAX_CATCHUP_MIN) s.lastMin = nowMin - MAX_CATCHUP_MIN;
   uint32_t ev = 0;
   while (s.lastMin < nowMin) ev |= tickMinute(s);

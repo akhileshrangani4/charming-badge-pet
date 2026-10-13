@@ -15,7 +15,11 @@ class PowerMgr {
   bool dimmed() const { return dimmed_; }
   [[noreturn]] void sleepNow(uint32_t seconds);
   void buzz(int pulses);
+  // Called right before any panel command (brightness, sleep) so it never overlaps a frame push.
+  void setBeforePanel(void (*fn)()) { beforePanel_ = fn; }
  private:
+  void panel() { if (beforePanel_) beforePanel_(); }
+  void (*beforePanel_)() = nullptr;
   uint32_t lastActivity_ = 0; bool dimmed_ = false, timerWake_ = false;
 };
 }

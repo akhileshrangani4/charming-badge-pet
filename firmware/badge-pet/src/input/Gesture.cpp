@@ -3,7 +3,9 @@
 namespace input {
 void GestureTracker::move(int x, int y) {
   if (!active_) return;
-  path_ += sqrtf((float)((x - lx_) * (x - lx_) + (y - ly_) * (y - ly_)));
+  const int dx = x - lx_, dy = y - ly_;
+  if (dx * dx + dy * dy <= 4) return;   // ignore touch jitter of 2 px or less, or a resting thumb adds up to a "stroke"
+  path_ += sqrtf((float)(dx * dx + dy * dy));
   lx_ = x; ly_ = y;
 }
 Gesture GestureTracker::end(uint32_t ms) {

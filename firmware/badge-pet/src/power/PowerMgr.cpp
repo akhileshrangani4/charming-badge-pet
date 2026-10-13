@@ -12,12 +12,12 @@ void PowerMgr::begin() {
 }
 void PowerMgr::activity(uint32_t ms) {
   lastActivity_ = ms;
-  if (dimmed_) { M5.Display.setBrightness(BRIGHT); dimmed_ = false; }
+  if (dimmed_) { panel(); M5.Display.setBrightness(BRIGHT); dimmed_ = false; }
 }
 void PowerMgr::update(uint32_t ms) {
   if (!dimmed_ && ms - lastActivity_ >= DIM_MS) dimNow();
 }
-void PowerMgr::dimNow() { M5.Display.setBrightness(DIMMED); dimmed_ = true; }
+void PowerMgr::dimNow() { panel(); M5.Display.setBrightness(DIMMED); dimmed_ = true; }
 void PowerMgr::buzz(int pulses) {
   for (int i = 0; i < pulses; i++) { M5.Power.setVibration(200); delay(120); M5.Power.setVibration(0); delay(120); }
 }
@@ -30,6 +30,7 @@ void PowerMgr::sleepNow(uint32_t seconds) {
 #else
   esp_sleep_enable_ext1_wakeup(mask, ESP_EXT1_WAKEUP_ANY_LOW);
 #endif
+  panel();
   M5.Power.deepSleep((uint64_t)seconds * 1000000ULL, false);
   for (;;) delay(1000);   // deepSleep does not return; guard in case it refuses
 }

@@ -12,6 +12,8 @@ bool isNight(int64_t m);
 PetState newPet(int64_t nowMin);
 uint32_t tickMinute(PetState& s);
 uint32_t catchUp(PetState& s, int64_t nowMin);
+// The clock was corrected (not time passing): move the pet to nowMin and shift every saved timestamp with it.
+void resyncClock(PetState& s, int64_t nowMin);
 uint32_t applyCare(PetState& s, Care c, int64_t nowMin);
 bool callBack(PetState& s, int64_t nowMin);
 bool togglePause(PetState& s, int64_t nowMin);

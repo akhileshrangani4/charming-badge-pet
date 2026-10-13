@@ -15,9 +15,13 @@ Mood moodOf(const PetState& s) {
   if (s.joy > 70) return Mood::Happy;
   return Mood::Content;
 }
+// Spec: buzz when it is sick, about to run away, or throwing a tantrum. At night only a runaway
+// within two hours is worth waking someone for.
 bool needsAttention(const PetState& s) {
   if (s.life == Life::Gone || s.paused) return false;
-  return s.sick || s.tantrum || s.food < 15 || s.hygiene < 15 || s.joy < 15 || s.messes >= 2;
+  const bool leavingSoon = (s.sick && s.sinceCareMin >= 8 * 60 - 120) || s.allZeroMin >= 4 * 60 - 120;
+  if (isNight(s.lastMin)) return leavingSoon;
+  return s.sick || s.tantrum || leavingSoon;
 }
 const char* phraseFor(Mood m) {
   switch (m) {

@@ -76,6 +76,7 @@ void App::setup() {
   if (const char* p = pet::phraseFor(pet::moodOf(pet_))) { display::Content k; k.title = p; k.ttlMs = 2500; ui.showMessage(k, millis()); }
   st.save(pet_);
   lastSaveMs_ = millis();
+  pwr.setBeforePanel(waitDisplayIdle);
   pwr.begin();
   if (pwr.wokeByTimer()) {
     if (pet::needsAttention(pet_)) {
@@ -103,7 +104,7 @@ void App::serialCommands() {
   if (sscanf(line, "T %d-%d-%d %d:%d", &y, &mo, &d, &h, &mi) == 5) {
     st.setClock(y, mo, d, h, mi);
     cached = -1;
-    pet_.lastMin = pet::localMinutes(y, mo, d, h, mi) + debugOffsetMin_;   // correcting the clock is not time passing
+    pet::resyncClock(pet_, pet::localMinutes(y, mo, d, h, mi) + debugOffsetMin_);   // correcting the clock is not time passing
     Serial.println("clock set");
   }
   else if (sscanf(line, "F %d", &mins) == 1) { debugOffsetMin_ += mins; ui.onEvents(pet::catchUp(pet_, now()), pet_, millis()); Serial.println("forwarded"); }
@@ -126,7 +127,6 @@ void App::loop() {
   if (ev) ui.onEvents(ev, pet_, ms);
   if (ev || ui.cared) { st.save(pet_); lastSaveMs_ = ms; ui.cared = false; }
   if (ms - lastSaveMs_ > 5 * 60 * 1000) { st.save(pet_); lastSaveMs_ = ms; }
-  waitDisplayIdle();   // brightness and sleep talk to the panel, so wait for the last push to finish
   if (f.any) pwr.activity(ms);
   pwr.update(ms);
   if (ev & (pet::EV_AUTO_UNPAUSE | pet::EV_SICK | pet::EV_SICKER | pet::EV_TANTRUM | pet::EV_RAN_AWAY)) pwr.buzz(1);
