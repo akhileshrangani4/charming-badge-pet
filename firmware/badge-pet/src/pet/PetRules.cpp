@@ -26,6 +26,7 @@ PetState newPet(int64_t nowMin) {
 uint32_t tickMinute(PetState& s) {
   uint32_t ev = 0;
   s.lastMin++;
+  if (s.life == Life::Gone) { s.goneMin++; return ev; }
   const float f = s.asleep ? SLEEP_DECAY : 1.0f;
   const float k = s.sick ? SICK_DECAY : 1.0f;
   s.food    -= 100.0f / FOOD_EMPTY_MIN * f * k;
@@ -52,10 +53,17 @@ uint32_t tickMinute(PetState& s) {
   } else if (++s.sickMin >= SICK_STAGE_UP_MIN && s.sick < MAX_SICK) {
     s.sick++; s.sickMin = 0; ev |= EV_SICKER;
   }
+  if ((s.sick && s.sinceCareMin >= RUNAWAY_SICK_NOCARE_MIN) || s.allZeroMin >= RUNAWAY_ALLZERO_MIN) {
+    s.life = Life::Gone; s.goneMin = 0; s.tantrum = false; s.asleep = false; s.paused = false;
+    s.trust = std::min(s.trust, RETURN_TRUST_CAP);
+    return ev | EV_RAN_AWAY;
+  }
   return ev;
 }
 
 uint32_t catchUp(PetState& s, int64_t nowMin) {
+  if (nowMin < s.lastMin) { s.lastMin = nowMin; return 0; }        // clock went backwards: resync, simulate nothing
+  if (nowMin - s.lastMin > MAX_CATCHUP_MIN) s.lastMin = nowMin - MAX_CATCHUP_MIN;
   uint32_t ev = 0;
   while (s.lastMin < nowMin) ev |= tickMinute(s);
   return ev;
@@ -97,10 +105,31 @@ uint32_t applyCare(PetState& s, Care c, int64_t nowMin) {
   if (isCare) {
     s.sinceCareMin = 0;
     s.trust += need ? TRUST_NEED_GAIN : TRUST_CARE_GAIN;
+    if (s.life == Life::Returning && nowMin - s.lastWinbackMin >= WINBACK_GAP_MIN) {
+      s.lastWinbackMin = nowMin;
+      if (++s.winbackDone >= s.winbackNeeded) {
+        s.life = Life::Normal;
+        s.trust = std::max(s.trust, WON_BACK_TRUST);
+        ev |= EV_WON_BACK;
+      }
+    }
   }
   clampAll(s);
   return ev;
 }
-bool callBack(PetState&, int64_t) { return false; }
+bool callBack(PetState& s, int64_t nowMin) {
+  catchUp(s, nowMin);
+  if (s.life != Life::Gone) return false;
+  s.life = Life::Returning;
+  s.winbackNeeded = (uint8_t)(s.goneMin >= WINBACK_LONG_GONE_MIN ? WINBACK_SESSIONS_LONG : WINBACK_SESSIONS);
+  s.winbackDone = 0;
+  s.lastWinbackMin = nowMin - WINBACK_GAP_MIN;
+  s.food = s.energy = s.joy = s.hygiene = RETURN_STAT;
+  s.sick = 0; s.sickMin = 0; s.messes = 0;
+  for (auto& d : s.messDue) d = -1;
+  s.zeroMin = s.allZeroMin = s.messMin = 0;
+  s.sinceCareMin = 0; s.tantrum = false; s.calmWindowMin = 0; s.goneMin = 0;
+  return true;
+}
 bool togglePause(PetState&, int64_t) { return false; }
 }
