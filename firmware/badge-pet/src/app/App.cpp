@@ -7,6 +7,7 @@
 #include "../render/TextLayer.h"
 #include "../scenes/Scenes.h"
 #include "../store/Store.h"
+#include "../power/PowerMgr.h"
 namespace app {
 static M5Canvas canvases[2] = {M5Canvas(&M5.Display), M5Canvas(&M5.Display)};
 static int slot = 0;
@@ -16,6 +17,7 @@ static scenes::Scenes ui(canvases[0], text, mascot);
 static input::Input in;
 static store::Store st;
 static pet::PetState pet_;
+static power::PowerMgr pwr;
 
 static int64_t debugOffsetMin_ = 0;   // added by the F serial command so every time-gated rule can be tested
 static int64_t cached = -1;
@@ -74,6 +76,23 @@ void App::setup() {
   if (const char* p = pet::phraseFor(pet::moodOf(pet_))) { display::Content k; k.title = p; k.ttlMs = 2500; ui.showMessage(k, millis()); }
   st.save(pet_);
   lastSaveMs_ = millis();
+  pwr.begin();
+  if (pwr.wokeByTimer()) {
+    if (pet::needsAttention(pet_)) {
+      pwr.buzz(2);
+      const uint32_t until = millis() + 5000;   // brief glance at the pet, then back to sleep
+      while (millis() < until) {
+        M5.update();
+        ui.setTarget(canvases[slot], slot);
+        submit(canvases[slot], ui.draw(pet_, millis()));
+        slot ^= 1;
+        if (M5.BtnA.isPressed() || M5.BtnB.isPressed() || M5.Touch.getDetail().isPressed()) { pwr.activity(millis()); return; }
+      }
+    }
+    st.save(pet_);
+    waitDisplayIdle();
+    pwr.sleepNow(power::WAKE_EVERY_S);
+  }
 }
 
 void App::serialCommands() {
@@ -107,9 +126,16 @@ void App::loop() {
   if (ev) ui.onEvents(ev, pet_, ms);
   if (ev || ui.cared) { st.save(pet_); lastSaveMs_ = ms; ui.cared = false; }
   if (ms - lastSaveMs_ > 5 * 60 * 1000) { st.save(pet_); lastSaveMs_ = ms; }
+  waitDisplayIdle();   // brightness and sleep talk to the panel, so wait for the last push to finish
+  if (f.any) pwr.activity(ms);
+  pwr.update(ms);
+  if (ev & (pet::EV_AUTO_UNPAUSE | pet::EV_SICK | pet::EV_SICKER | pet::EV_TANTRUM | pet::EV_RAN_AWAY)) pwr.buzz(1);
+  if (pet::moodOf(pet_) == pet::Mood::Sleeping && !pwr.dimmed()) pwr.dimNow();
+  if (pwr.shouldSleep(ms) && ui.current() != scenes::SceneId::Play) { st.save(pet_); pwr.sleepNow(power::WAKE_EVERY_S); }
   ui.setTarget(canvases[slot], slot);
   submit(canvases[slot], ui.draw(pet_, ms));
   slot ^= 1;
+  if (pwr.dimmed()) delay(40);   // ~15 fps while dimmed
 
   static uint32_t frames = 0, t0 = 0;
   if (++frames == 120) { Serial.printf("fps=%.1f\n", 120000.f / (ms - t0)); frames = 0; t0 = ms; }
