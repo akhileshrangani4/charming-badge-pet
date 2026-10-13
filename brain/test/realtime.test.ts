@@ -10,7 +10,7 @@ function setup(thinkImpl: (q: string) => Promise<string> = async () => "it's 3pm
     userTranscript: (t) => log.push(`user:${t}`), petTranscript: (t) => log.push(`pet:${t}`), usage: () => log.push("usage"),
     think: (q) => { log.push(`think:${q}`); return thinkImpl(q); }, error: (c) => log.push(`error:${c}`),
   };
-  const link = new RealtimeLink(async () => ws, { model: "gpt-realtime-2.1-mini", voice: "coral", instructions: "be a flame", transcribeModel: "gpt-4o-mini-transcribe" }, ev);
+  const link = new RealtimeLink(async () => ws, { model: "gpt-realtime-2.1", voice: "coral", instructions: "be a flame", transcribeModel: "gpt-transcribe" }, ev);
   return { ws, log, link };
 }
 

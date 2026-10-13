@@ -5,7 +5,7 @@ import type { Card } from "../src/types";
 
 function deps(create: ReturnType<typeof fakeClaude>) {
   const remembered: string[] = []; const cards: Card[] = [];
-  return { create, model: "claude-sonnet-5-5", remember: (f: string) => remembered.push(f), showCard: (c: Card) => cards.push(c), remembered, cards };
+  return { create, model: "claude-opus-5-5", remember: (f: string) => remembered.push(f), showCard: (c: Card) => cards.push(c), remembered, cards };
 }
 
 describe("think", () => {
@@ -15,7 +15,7 @@ describe("think", () => {
     const r = await think(d, { system: "S", history: [], question: "hello?" });
     expect(r.text).toBe("Hi Avi!");
     expect(r.usd).toBeGreaterThan(0);
-    expect(c.calls[0]).toMatchObject({ model: "claude-sonnet-5-5", fallbacks: "default", betas: ["server-side-fallback-2026-07-01"] });
+    expect(c.calls[0]).toMatchObject({ model: "claude-opus-5-5", fallbacks: "default", betas: ["server-side-fallback-2026-07-01"] });
   });
   it("runs remember and show_card tools, then finishes", async () => {
     const c = fakeClaude([

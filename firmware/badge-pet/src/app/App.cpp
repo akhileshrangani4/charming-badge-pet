@@ -63,7 +63,9 @@ static void pushTask(void*) {
   }
 }
 static void waitDisplayIdle() { xSemaphoreTake(pushIdle, portMAX_DELAY); xSemaphoreGive(pushIdle); }
-static bool fullPush = false;   // diagnostic (serial Z): send the whole screen every frame
+static bool fullPush = false;
+static uint32_t simTalkUntil = 0;   // serial J: a simulated push-to-talk ends at this time
+static uint32_t thinkingSince = 0;  // when the face went to Thinking; no reply in 15 s gives up   // diagnostic (serial Z): send the whole screen every frame
 static void submit(M5Canvas& c, const render::Rect& r0) {
   const render::Rect r = fullPush ? render::Rect{0, 0, render::SCREEN, render::SCREEN} : r0;
   xSemaphoreTake(pushIdle, portMAX_DELAY);   // the previous frame must be on screen before this canvas is handed off
@@ -143,6 +145,7 @@ void App::serialCommands() {
   else if (sscanf(line, "F %d", &mins) == 1) { debugOffsetMin_ += mins; ui.onEvents(pet::catchUp(pet_, now()), pet_, millis()); Serial.println("forwarded"); }
   else if (sscanf(line, "G %d", &mins) == 1) { ui.debugGo((scenes::SceneId)mins, millis()); Serial.println("scene"); }
   else if (sscanf(line, "X %d", &mins) == 1) { ui.debugExpression(mins, millis() + 20000); Serial.println("expr"); }
+  else if (line[0] == 'J') { simTalkUntil = millis() + 3000; net::Cmd c{}; c.kind = net::Cmd::TalkStart; net::post(c); ui.setTalkFace(net::Face::Listening); Serial.println("sim talk"); }   // simulate a 3 s push-to-talk
   else if (line[0] == 'Z') { fullPush = !fullPush; Serial.printf("full-screen push %s\n", fullPush ? "on" : "off"); }
   else if (line[0] == 'Q') {   // dump what the display framebuffer holds (not our canvas): "FRAME w h" + BE RGB565
     waitDisplayIdle();
@@ -211,15 +214,18 @@ void App::loop() {
     if (st == net::Status::Online) { net::Cmd c{}; c.kind = net::Cmd::TalkStart; net::post(c); ui.setTalkFace(net::Face::Listening); }
     else ui.showStatus(st == net::Status::NoWifi ? "NO WIFI" : st == net::Status::Connecting ? "CONNECTING..." : (st == net::Status::BadToken ? "RE-PAIR ME" : "CAN'T REACH ME"), ms);
   }
-  if (f.button == BE::TalkEnd) { net::Cmd c{}; c.kind = net::Cmd::TalkEnd; net::post(c); ui.setTalkFace(net::Face::Thinking); }
+  const bool simEnd = simTalkUntil && (int32_t)(ms - simTalkUntil) >= 0;
+  if (simEnd) simTalkUntil = 0;
+  if (f.button == BE::TalkEnd || simEnd) { net::Cmd c{}; c.kind = net::Cmd::TalkEnd; net::post(c); ui.setTalkFace(net::Face::Thinking); thinkingSince = ms; }
+  if (thinkingSince && ms - thinkingSince > 15000) { thinkingSince = 0; ui.setTalkFace(net::Face::Idle); ui.showStatus("NO ANSWER", ms); }
   if (f.button == BE::TalkCancel) { net::Cmd c{}; c.kind = net::Cmd::TalkCancel; net::post(c); ui.setTalkFace(net::Face::Idle); }
   net::Event ne;
   while (net::poll(ne)) {
     if (ne.kind == net::Event::StatusChanged) { if (ne.status != net::Status::Online) ui.setTalkFace(net::Face::Idle); continue; }
     switch (ne.in.kind) {
-      case net::Incoming::FaceMsg: ui.setTalkFace(ne.in.face); break;
+      case net::Incoming::FaceMsg: ui.setTalkFace(ne.in.face); if (ne.in.face != net::Face::Thinking) thinkingSince = 0; break;
       case net::Incoming::CardMsg: ui.showCard(ne.in.card, ms); break;
-      case net::Incoming::SayEnd: ui.setTalkFace(net::Face::Idle); break;
+      case net::Incoming::SayEnd: thinkingSince = 0; ui.setTalkFace(net::Face::Idle); break;
       case net::Incoming::Error: ui.setTalkFace(net::Face::Idle); ui.showStatus(ne.in.err == net::Err::OverBudget ? "TOO SLEEPY" : "BRAIN FOG", ms); break;
       default: break;
     }

@@ -23,7 +23,9 @@ export class Pet extends DurableObject<Env> {
     this.brain = new PetBrain({
       store, now: () => Date.now(),
       sendBadgeJson: (o) => badge()?.send(JSON.stringify(o)),
-      sendBadgeAudio: (b) => badge()?.send(b),
+      // Reply audio arrives in large deltas; the badge allocates each frame in internal RAM, so send
+      // small 80 ms frames (3840 bytes at 24 kHz, 16-bit mono) to keep its socket alive.
+      sendBadgeAudio: (b) => { const ws = badge(); if (!ws) return; for (let i = 0; i < b.byteLength; i += 3840) ws.send(b.slice(i, Math.min(i + 3840, b.byteLength))); },
       closeBadge: () => ctx.getWebSockets("badge").forEach((w) => w.close(4001, "token rotated")),
       openUpstream: async (model) => {
         const res = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`, {
@@ -56,6 +58,7 @@ export class Pet extends DurableObject<Env> {
       this.ctx.getWebSockets("badge").forEach((w) => w.close(4000, "replaced by a newer connection"));
       const [client, server] = Object.values(new WebSocketPair());
       this.ctx.acceptWebSocket(server, ["badge"]);
+      console.log("badge socket opened");
       this.brain.onBadgeOpen();
       return new Response(null, { status: 101, webSocket: client });
     }
@@ -75,5 +78,5 @@ export class Pet extends DurableObject<Env> {
   async webSocketMessage(_ws: WebSocket, msg: string | ArrayBuffer) {
     if (typeof msg === "string") await this.brain.onBadgeJson(msg); else this.brain.onBadgeAudio(msg);
   }
-  async webSocketClose() { this.brain.onBadgeClose(); }
+  async webSocketClose(_ws: WebSocket, code: number) { console.log("badge socket closed", code); this.brain.onBadgeClose(); }
 }

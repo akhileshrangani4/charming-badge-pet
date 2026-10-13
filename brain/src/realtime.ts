@@ -39,7 +39,7 @@ export class RealtimeLink {
         session: {
           type: "realtime", model: this.cfg.model, output_modalities: ["audio"], instructions: this.cfg.instructions,
           audio: {
-            input: { format: { type: "audio/pcm", rate: 24000 }, turn_detection: null, transcription: { model: this.cfg.transcribeModel } },
+            input: { format: { type: "audio/pcm", rate: 24000 }, turn_detection: null, noise_reduction: { type: "near_field" }, transcription: { model: this.cfg.transcribeModel } },
             output: { format: { type: "audio/pcm", rate: 24000 }, voice: this.cfg.voice },
           },
           tools: [{

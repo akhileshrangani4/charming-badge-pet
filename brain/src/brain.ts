@@ -48,7 +48,7 @@ export class PetBrain {
       {
         audio: (b) => this.d.sendBadgeAudio(b),
         face: (f) => this.d.sendBadgeJson({ t: "face", f }),
-        done: () => { this.d.sendBadgeJson({ t: "say_end" }); this.armIdle(); },
+        done: () => { console.log("reply done"); this.d.sendBadgeJson({ t: "say_end" }); this.armIdle(); },
         userTranscript: (t) => this.message("voice", "user", t),
         petTranscript: (t) => this.message("voice", "pet", t),
         usage: (u) => this.addSpend(realtimeCost(settings.realtimeModel, u)),
@@ -69,6 +69,7 @@ export class PetBrain {
   async onBadgeJson(text: string) {
     let m: { t?: string; snapshot?: Snapshot; [k: string]: unknown };
     try { m = JSON.parse(text); } catch { return; }
+    if (m.t !== "snapshot") console.log("badge:", m.t);
     switch (m.t) {
       case "hello":
         if (m.snapshot) this.setSnapshot(m.snapshot);
@@ -86,12 +87,13 @@ export class PetBrain {
         link.startTurn();
         break;
       }
-      case "talk_end": this.link?.endTurn(); break;
+      case "talk_end": console.log("badge audio bytes this turn:", this.audioIn); this.audioIn = 0; this.link?.endTurn(); break;
       case "talk_cancel": this.link?.cancelTurn(); this.d.sendBadgeJson({ t: "face", f: "idle" }); this.armIdle(); break;
       default: return;
     }
   }
-  onBadgeAudio(buf: ArrayBuffer) { this.link?.appendAudio(buf); }
+  private audioIn = 0;
+  onBadgeAudio(buf: ArrayBuffer) { this.audioIn += buf.byteLength; this.link?.appendAudio(buf); }
   onBadgeClose() { this.link?.cancelTurn(); this.armIdle(); }
   private setSnapshot(s: Snapshot) {
     this.d.store.setSnapshot(s, this.d.now());

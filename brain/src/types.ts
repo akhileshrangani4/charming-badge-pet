@@ -8,4 +8,4 @@ export interface Settings { name: string; voice: string; dailyCapUsd: number; re
 export interface Message { id: number; ts: number; channel: "voice" | "text"; role: "user" | "pet"; text: string }
 export interface Card { title: string; body?: string; qr?: string }
 export interface NetworkEntry { ssid: string; psk: string }
-export const DEFAULT_SETTINGS: Settings = { name: "Charm", voice: "coral", dailyCapUsd: 2, realtimeModel: "gpt-realtime-2.1-mini" };
+export const DEFAULT_SETTINGS: Settings = { name: "Charm", voice: "coral", dailyCapUsd: 2, realtimeModel: "gpt-realtime-2.1" };
