@@ -25,3 +25,14 @@ export function fakeClaude(replies: ClaudeReply[]): CreateMessage & { calls: Rec
   return fn;
 }
 export const usage = { input_tokens: 1000, output_tokens: 100 };
+import type { WsLike } from "../src/realtime";
+// Records sent frames; emit() delivers a server event to the link.
+export class FakeWs implements WsLike {
+  sent: unknown[] = []; closed = false;
+  private handlers: Record<string, Array<(e: { data?: unknown }) => void>> = {};
+  send(d: string | ArrayBuffer) { this.sent.push(typeof d === "string" ? JSON.parse(d) : d); }
+  close() { this.closed = true; (this.handlers.close ?? []).forEach((f) => f({})); }
+  addEventListener(t: string, f: (e: { data?: unknown }) => void) { (this.handlers[t] ??= []).push(f); }
+  emit(evt: unknown) { (this.handlers.message ?? []).forEach((f) => f({ data: JSON.stringify(evt) })); }
+  types() { return (this.sent as Array<{ type?: string }>).map((m) => m.type); }
+}
