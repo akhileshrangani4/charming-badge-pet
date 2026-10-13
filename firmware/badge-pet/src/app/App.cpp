@@ -40,7 +40,12 @@ static QueueHandle_t pushQueue;
 static SemaphoreHandle_t pushIdle;
 static void pushTask(void*) {
   PushJob job;
-  for (;;) if (xQueueReceive(pushQueue, &job, portMAX_DELAY)) { pushNow(*job.canvas, job.rect); xSemaphoreGive(pushIdle); }
+  for (;;) {
+    if (!xQueueReceive(pushQueue, &job, portMAX_DELAY)) continue;
+    pushNow(*job.canvas, job.rect);
+    xSemaphoreGive(pushIdle);
+    vTaskDelay(1);   // the SPI push busy-waits; yield so core 0's idle task can feed the task watchdog
+  }
 }
 static void waitDisplayIdle() { xSemaphoreTake(pushIdle, portMAX_DELAY); xSemaphoreGive(pushIdle); }
 static void submit(M5Canvas& c, const render::Rect& r) {
