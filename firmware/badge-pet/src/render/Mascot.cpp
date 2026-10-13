@@ -61,6 +61,7 @@ void Mascot::deform(float x, float y, int i, uint32_t ms, float& ox, float& oy) 
     case Expression::Sick: sy *= 0.9f; sx *= 1.07f; break;
     case Expression::Tantrum: sx += sinf(t / 45) * 0.03f; hopY = -fabsf(sinf(t / 120)) * 10; break;
     case Expression::Sad: case Expression::Sleepy: sy *= 0.95f; sx *= 1.03f; break;
+    case Expression::Listening: sy *= 1.03f; sx *= 0.98f; hopY = -4; break;
     default: break;
   }
   const float g = 1 + growth_ * 0.04f;
@@ -177,7 +178,7 @@ Rect Mascot::draw(M5Canvas& c, uint32_t ms) {
   }
   float fx, fy; deform(260, 268, 0, ms, fx, fy);
   const float cs = cosf(pose_.rot), sn = sinf(pose_.rot), lx = lookX_ * 14 * s, ly = lookY_ * 10 * s;
-  drawFace(c, expr_, fx + lx * cs - ly * sn, fy + lx * sn + ly * cs, s, ms, blinking_, pose_.rot);
+  drawFace(c, expr_, fx + lx * cs - ly * sn, fy + lx * sn + ly * cs, s, ms, blinking_, pose_.rot, mouth_);
   bounds_ = Rect{(int16_t)minX, (int16_t)minY, (int16_t)(maxX - minX + 1), (int16_t)(maxY - minY + 1)}.padded((int)(sr + 3));
   if (fabsf(pose_.rot) < 0.35f) bounds_ = bounds_.unite(Rect{(int16_t)(pose_.cx - 122 * s), (int16_t)(pose_.cy + 190 * s), (int16_t)(244 * s), (int16_t)(34 * s)});
   return bounds_;

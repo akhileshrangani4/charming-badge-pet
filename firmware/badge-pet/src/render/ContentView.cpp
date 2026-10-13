@@ -1,12 +1,14 @@
 #include "ContentView.h"
 #include "Colors.h"
+#include <string.h>
 namespace render {
 Rect drawContent(M5Canvas& c, TextLayer& t, const display::Content& k) {
   Rect r;
   if (k.qr) {
     if (k.title) r = r.unite(t.text(c, Font::Head32, k.title, 64, UI));
     c.fillRoundRect(CENTER - 80, 88, 160, 160, 12, 0xFFFFFFu);
-    c.qrcode(k.qr, CENTER - 70, 98, 140, 3);
+    const size_t len = strlen(k.qr);
+    c.qrcode(k.qr, CENTER - 70, 98, 140, len <= 40 ? 3 : 6);   // version 6 holds up to ~134 bytes
     r = r.unite(Rect{(int16_t)(CENTER - 80), 88, 160, 160});
     if (k.body) r = r.unite(t.text(c, Font::Mono15, k.body, 270, DIM));
     return r;

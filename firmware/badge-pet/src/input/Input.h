@@ -16,6 +16,7 @@ struct InputFrame {
 };
 class Input {
  public:
+  void setTalkEnabled(bool on) { buttons_.setTalkEnabled(on); }
   void begin();
   InputFrame poll(uint32_t ms);
 

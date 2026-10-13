@@ -18,7 +18,7 @@ static void arc(M5Canvas& c, float cx, float cy, float rad, float a0, float a1, 
     line(c, px, py, x, y, r, col); px = x; py = y;
   }
 }
-void drawFace(M5Canvas& c, Expression e, float x, float y, float s, uint32_t ms, bool blink, float rotation) {
+void drawFace(M5Canvas& c, Expression e, float x, float y, float s, uint32_t ms, bool blink, float rotation, float mouth) {
   gAx = x; gAy = y; gCs = cosf(rotation); gSn = sinf(rotation);
   const float ex = 21 * s, r = 9 * s, PI_F = 3.14159265f;
   for (int side = -1; side <= 1; side += 2) {
@@ -40,6 +40,9 @@ void drawFace(M5Canvas& c, Expression e, float x, float y, float s, uint32_t ms,
       }
       case Expression::Sad:     line(c, cx, y - 3 * s, cx, y + 8 * s, r, INK); break;
       case Expression::Hungry: { const float h = 18 * s; line(c, cx, y - h / 2, cx, y + h / 2, r, INK); break; }
+      case Expression::Listening: { ellipse(c, cx, y, 9 * s, 11 * s, INK); ellipse(c, cx - 3 * s, y - 4 * s, 3 * s, 3 * s, CREAM); break; }
+      case Expression::Thinking:  { const float h = 13 * s; line(c, cx + 4 * s, y - 6 * s - h / 2, cx + 4 * s, y - 6 * s + h / 2, r, INK); break; }
+      case Expression::Speaking:  { const float h = blink ? 1 : 13 * s; line(c, cx, y - h / 2, cx, y + h / 2, r, INK); break; }
       case Expression::Idle:
       default: { const float h = blink ? 1 : 13 * s; line(c, cx, y - h / 2, cx, y + h / 2, r, INK); break; }
     }
@@ -58,6 +61,16 @@ void drawFace(M5Canvas& c, Expression e, float x, float y, float s, uint32_t ms,
     case Expression::Sick: {
       float px = x - 18 * s, py = y + 26 * s;
       for (int i = 1; i <= 6; i++) { const float nx = x - 18 * s + i * 6 * s, ny = y + 30 * s + (i % 2 ? 4 : -4) * s; line(c, px, py, nx, ny, mr, INK); px = nx; py = ny; }
+      break;
+    }
+    case Expression::Thinking: {   // three drifting dots above-right
+      for (int i = 0; i < 3; i++) { const float ph = fmodf(ms / 600.0f + i / 3.0f, 1.0f); ellipse(c, x + (40 + i * 16) * s, y - (40 + ph * 30) * s, 4 * s, 4 * s, UI); }
+      break;
+    }
+    case Expression::Speaking: {   // mouth opens with the reply's loudness
+      const float open = 2 * s + mouth * 14 * s;
+      ellipse(c, x, y + 32 * s, 9 * s + mr, open + mr, INK);
+      if (open > 3 * s) ellipse(c, x, y + 32 * s, 9 * s - mr, open - mr, CORAL);
       break;
     }
     case Expression::Tantrum: ellipse(c, x, y + 30 * s, 10 * s, 8 * s, INK); break;

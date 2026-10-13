@@ -9,6 +9,8 @@
 #include "../store/Store.h"
 #include "../power/PowerMgr.h"
 #include "../power/Haptics.h"
+#include "../net/NetTask.h"
+#include "../net/Protocol.h"
 namespace app {
 static M5Canvas canvases[2] = {M5Canvas(&M5.Display), M5Canvas(&M5.Display)};
 static int slot = 0;
@@ -68,6 +70,18 @@ static void submit(M5Canvas& c, const render::Rect& r) {
   xQueueSend(pushQueue, &job, portMAX_DELAY);
 }
 
+static const char* moodName(pet::Mood m) {
+  static const char* names[] = {"gone", "paused", "sleeping", "sick", "tantrum", "hungry", "dirty", "sleepy", "grumpy", "sad", "happy", "content"};
+  return names[(int)m];
+}
+static net::SnapshotWire wireOf(const pet::PetState& s) {
+  return {moodName(pet::moodOf(s)), s.food, s.energy, s.joy, s.hygiene, s.trust, s.sick,
+          s.life == pet::Life::Gone ? "gone" : (s.life == pet::Life::Returning ? "returning" : "normal"),
+          s.asleep, (uint16_t)(s.ageMin / 1440), s.growth, (uint8_t)pet::hourOf(s.lastMin)};
+}
+static void postSnapshot(bool hello) { net::Cmd c{}; c.kind = hello ? net::Cmd::Hello : net::Cmd::Snapshot; c.snap = wireOf(pet_); net::post(c); }
+static void stopNet() { net::Cmd stop{}; stop.kind = net::Cmd::Stop; net::post(stop); delay(300); }   // Wi-Fi off before deep sleep
+
 void App::setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
@@ -111,7 +125,7 @@ void App::setup() {
 
 void App::serialCommands() {
   if (!Serial.available()) return;
-  char line[48] = {0};
+  char line[160] = {0};
   const size_t n = Serial.readBytesUntil('\n', line, sizeof line - 1); line[n] = 0;
   pwr.activity(millis());   // a serial session counts as someone using the badge
   int y, mo, d, h, mi, mins;
@@ -141,6 +155,12 @@ void App::serialCommands() {
     ui.debugGo(pet_.life == pet::Life::Gone ? scenes::SceneId::Gone : scenes::SceneId::Pet, millis());
     Serial.println("restored");
   }
+  else if (line[0] == 'W' && line[1] == ' ') {   // W <ssid> <password>
+    net::Cmd c{}; c.kind = net::Cmd::AddNetwork;
+    if (sscanf(line + 2, "%32s %64s", c.text, c.text2) >= 1) { net::post(c); Serial.println("network added"); }
+  }
+  else if (line[0] == 'N' && (line[1] == 0 || line[1] == '\r')) { for (uint8_t i = 0; i < net::networkCount(); i++) Serial.printf("%u %s\n", i, net::networkName(i)); }
+  else if (line[0] == 'D' && line[1] == ' ') { net::Cmd c{}; c.kind = net::Cmd::SetToken; strncpy(c.text, line + 2, 64); for (char* p = c.text; *p; p++) if (*p == '\r') *p = 0; net::post(c); Serial.println("token set"); }
   else if (strncmp(line, "R YES", 5) == 0) { pet_ = pet::newPet(now()); st.save(pet_); Serial.println("new pet"); }
   else if (line[0] == 'S') {
     Serial.printf("min=%lld food=%.0f energy=%.0f joy=%.0f hyg=%.0f trust=%.0f disc=%.0f spoil=%.0f sick=%u messes=%u life=%u asleep=%d paused=%d budget=%.0f age=%u growth=%u mood=%u\n",
@@ -151,13 +171,41 @@ void App::serialCommands() {
 }
 
 void App::loop() {
+  // Started here, not in setup(): the timer-wake glance can return early from setup().
+  static bool netStarted = false;
+  if (!netStarted) { net::startNetTask(); postSnapshot(true); netStarted = true; }
   M5.update();
   const uint32_t ms = millis();
   serialCommands();
   uint32_t ev = pet::catchUp(pet_, now());
+  in.setTalkEnabled(pet_.life != pet::Life::Gone && ui.current() == scenes::SceneId::Pet);
   const input::InputFrame f = in.poll(ms);
+  using BE = input::ButtonEvent;
+  if (f.button == BE::TalkStart) {
+    const net::Status st = net::status();
+    if (st == net::Status::Online) { net::Cmd c{}; c.kind = net::Cmd::TalkStart; net::post(c); ui.setTalkFace(net::Face::Listening); }
+    else ui.showStatus(st == net::Status::NoWifi || st == net::Status::Connecting ? "NO WIFI" : (st == net::Status::BadToken ? "RE-PAIR ME" : "CAN'T REACH ME"), ms);
+  }
+  if (f.button == BE::TalkEnd) { net::Cmd c{}; c.kind = net::Cmd::TalkEnd; net::post(c); ui.setTalkFace(net::Face::Thinking); }
+  if (f.button == BE::TalkCancel) { net::Cmd c{}; c.kind = net::Cmd::TalkCancel; net::post(c); ui.setTalkFace(net::Face::Idle); }
+  net::Event ne;
+  while (net::poll(ne)) {
+    if (ne.kind == net::Event::StatusChanged) { if (ne.status != net::Status::Online) ui.setTalkFace(net::Face::Idle); continue; }
+    switch (ne.in.kind) {
+      case net::Incoming::FaceMsg: ui.setTalkFace(ne.in.face); break;
+      case net::Incoming::CardMsg: ui.showCard(ne.in.card, ms); break;
+      case net::Incoming::SayEnd: ui.setTalkFace(net::Face::Idle); break;
+      case net::Incoming::Error: ui.setTalkFace(net::Face::Idle); ui.showStatus(ne.in.err == net::Err::OverBudget ? "TOO SLEEPY" : "BRAIN FOG", ms); break;
+      default: break;
+    }
+  }
+  mascot.setMouth(net::speakingLevel());
   ev |= ui.handle(f, pet_, now(), ms);
   if (ev) ui.onEvents(ev, pet_, ms);
+  static pet::Mood lastMood = pet::Mood::Content;
+  static uint32_t lastSnapMs = 0;
+  // On mood change, plus every 2 min, so the app's online dot and the brain's stats stay current.
+  if (pet::moodOf(pet_) != lastMood || ms - lastSnapMs > 120000) { lastMood = pet::moodOf(pet_); lastSnapMs = ms; postSnapshot(false); }
   // A flash write stalls both cores for a moment, so batch saves: at most every 30 s after a
   // change, every 5 min regardless, and always right before sleeping.
   static bool unsaved = false;
@@ -168,7 +216,7 @@ void App::loop() {
   pwr.update(ms);
   if (ev & (pet::EV_AUTO_UNPAUSE | pet::EV_SICK | pet::EV_SICKER | pet::EV_TANTRUM | pet::EV_RAN_AWAY)) pwr.buzz(1);
   if (pet::moodOf(pet_) == pet::Mood::Sleeping && !pwr.dimmed()) pwr.dimNow();
-  if (pwr.shouldSleep(ms) && ui.current() != scenes::SceneId::Play) { st.save(pet_); pwr.sleepNow(power::WAKE_EVERY_S); }
+  if (pwr.shouldSleep(ms) && ui.current() != scenes::SceneId::Play) { st.save(pet_); stopNet(); pwr.sleepNow(power::WAKE_EVERY_S); }
   ui.setTarget(canvases[slot], slot);
   submit(canvases[slot], ui.draw(pet_, ms));
   slot ^= 1;

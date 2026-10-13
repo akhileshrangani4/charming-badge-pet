@@ -16,6 +16,7 @@ class Mascot {
   Pose pose() const { return pose_; }
   void setLook(float x, float y) { lookTX_ = x; lookTY_ = y; }
   void setGrowth(uint8_t g) { growth_ = g; }
+  void setMouth(float m) { mouth_ = m; }
   // Stand on real gravity: angle of "down" from screen-down, weight 0 (upright) .. 1 (fully follow).
   void setGravity(float angle, float weight) { gravAngle_ = angle; gravWeight_ = weight; }
   void poke(int x, int y);
@@ -34,6 +35,7 @@ class Mascot {
   uint32_t nextWander_ = 0, nextBlink_ = 1500, blinkStart_ = 0, lastMs_ = 0, boil_ = 1, seed_ = 12345;
   bool blinking_ = false;
   uint8_t growth_ = 0;
+  float mouth_ = 0;
   Rect bounds_;
 };
 }
