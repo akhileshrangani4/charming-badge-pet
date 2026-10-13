@@ -3,7 +3,8 @@
 #include <stddef.h>
 namespace audio {
 constexpr uint32_t RATE = 24000;
-constexpr size_t CHUNK = 960;   // 40 ms at 24 kHz
+constexpr size_t CHUNK = 960;        // 40 ms at 24 kHz (mic)
+constexpr size_t PLAY_CHUNK = 3840;  // 160 ms: the speaker holds only two clips, so each one must cover network hiccups
 class Voice {
  public:
   void begin();

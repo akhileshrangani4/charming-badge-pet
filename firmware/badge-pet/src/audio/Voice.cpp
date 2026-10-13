@@ -5,8 +5,9 @@
 namespace audio {
 void Voice::begin() {
   for (auto& b : rec_) b = (int16_t*)heap_caps_malloc(CHUNK * 2, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
-  for (auto& b : play_) b = (int16_t*)heap_caps_malloc(CHUNK * 2, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
-  ringCap_ = RATE * 4;   // 4 s of reply audio
+  // The speaker task copies from these into its own DMA buffers, so PSRAM is fine and keeps internal RAM for TLS.
+  for (auto& b : play_) b = (int16_t*)heap_caps_malloc(PLAY_CHUNK * 2, MALLOC_CAP_SPIRAM);
+  ringCap_ = RATE * 32;   // 32 s: replies arrive faster than real time and are capped near 30 s
   ring_ = (int16_t*)heap_caps_malloc(ringCap_ * 2, MALLOC_CAP_SPIRAM);
   M5.Speaker.setVolume(180);
 }
@@ -42,11 +43,11 @@ void Voice::enqueuePlayback(const uint8_t* pcm, size_t bytes) {
   flushing_ = false;
 }
 void Voice::pumpPlayback() {
-  // Start once 120 ms is buffered (jitter cushion); refill whenever fewer than 2 chunks are queued.
-  const size_t want = (M5.Speaker.isPlaying(0) ? CHUNK : CHUNK * 3);
+  // Start once 320 ms is buffered (jitter cushion); while playing, queue up to 160 ms whenever a slot frees.
+  const size_t want = (M5.Speaker.isPlaying(0) ? CHUNK : PLAY_CHUNK * 2);
   while (M5.Speaker.isPlaying(0) < 2 && (ringCount() >= want || (flushing_ && ringCount() > 0))) {
     int16_t* buf = play_[playIdx_ % 3];
-    const size_t n = ringCount() < CHUNK ? ringCount() : CHUNK;
+    const size_t n = ringCount() < PLAY_CHUNK ? ringCount() : PLAY_CHUNK;
     double acc = 0;
     for (size_t i = 0; i < n; i++) { buf[i] = ring_[tail_]; tail_ = (tail_ + 1) % ringCap_; acc += (double)buf[i] * buf[i]; }
     level_ = fminf(1.0f, sqrtf((float)(acc / (n ? n : 1))) / 6000.0f);
