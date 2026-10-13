@@ -21,6 +21,9 @@ class Scenes {
   void showMessage(const display::Content& k, uint32_t ms);
   SceneId current() const { return scene_; }
   bool cared = false;   // set whenever handle() applied care; App saves and clears it
+  // Debug (serial G/X commands): jump to a scene, force an expression for a few seconds.
+  void debugGo(SceneId id, uint32_t ms) { go(id, ms); }
+  void debugExpression(int e, uint32_t untilMs) { forcedExpr_ = e; forcedUntil_ = untilMs; }
  private:
   void go(SceneId id, uint32_t ms) { if (scene_ != id) { scene_ = id; full_ = true; } enteredMs_ = ms; }
   render::Rect drawn_[2];      // what each canvas last drew
@@ -33,5 +36,6 @@ class Scenes {
   PlayGame play_;
   uint32_t enteredMs_ = 0, happyUntil_ = 0, dizzyUntil_ = 0, lastInputMs_ = 0;
   bool full_ = true;
+  int forcedExpr_ = -1; uint32_t forcedUntil_ = 0;
 };
 }

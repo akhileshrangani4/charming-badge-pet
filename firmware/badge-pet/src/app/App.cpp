@@ -100,6 +100,7 @@ void App::serialCommands() {
   if (!Serial.available()) return;
   char line[48] = {0};
   const size_t n = Serial.readBytesUntil('\n', line, sizeof line - 1); line[n] = 0;
+  pwr.activity(millis());   // a serial session counts as someone using the badge
   int y, mo, d, h, mi, mins;
   if (sscanf(line, "T %d-%d-%d %d:%d", &y, &mo, &d, &h, &mi) == 5) {
     st.setClock(y, mo, d, h, mi);
@@ -108,6 +109,15 @@ void App::serialCommands() {
     Serial.println("clock set");
   }
   else if (sscanf(line, "F %d", &mins) == 1) { debugOffsetMin_ += mins; ui.onEvents(pet::catchUp(pet_, now()), pet_, millis()); Serial.println("forwarded"); }
+  else if (sscanf(line, "G %d", &mins) == 1) { ui.debugGo((scenes::SceneId)mins, millis()); Serial.println("scene"); }
+  else if (sscanf(line, "X %d", &mins) == 1) { ui.debugExpression(mins, millis() + 20000); Serial.println("expr"); }
+  else if (line[0] == 'P') {   // dump the last drawn frame: "FRAME 468 468\n" + raw big-endian RGB565
+    waitDisplayIdle();
+    M5Canvas& c = canvases[slot ^ 1];
+    Serial.printf("FRAME %d %d\n", render::SCREEN, render::SCREEN);
+    Serial.write((const uint8_t*)c.getBuffer(), (size_t)render::SCREEN * render::SCREEN * 2);
+    Serial.flush();
+  }
   else if (strncmp(line, "R YES", 5) == 0) { pet_ = pet::newPet(now()); st.save(pet_); Serial.println("new pet"); }
   else if (line[0] == 'S') {
     Serial.printf("min=%lld food=%.0f energy=%.0f joy=%.0f hyg=%.0f trust=%.0f disc=%.0f spoil=%.0f sick=%u messes=%u life=%u asleep=%d paused=%d budget=%.0f age=%u growth=%u mood=%u\n",

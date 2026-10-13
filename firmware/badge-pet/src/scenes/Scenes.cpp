@@ -148,6 +148,7 @@ Rect Scenes::draw(const pet::PetState& s, uint32_t ms) {
   Expression e = exprFor(mood);
   if (ms < happyUntil_ && !s.asleep) e = Expression::Happy;
   if (ms < dizzyUntil_) e = Expression::Dizzy;
+  if (forcedExpr_ >= 0 && ms < forcedUntil_) e = (Expression)forcedExpr_;
   m_.setExpression(e);
   m_.setGrowth(s.growth);
   const bool content = scene_ == SceneId::NameTag || scene_ == SceneId::Message || scene_ == SceneId::Status;
