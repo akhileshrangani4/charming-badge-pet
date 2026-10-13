@@ -88,6 +88,7 @@ tools/.venv/bin/python -I tools/serial_read.py "" 3 "T $(date '+%Y-%m-%d %H:%M')
 | `F 120` | Fast-forward 120 minutes (testing) |
 | `G 1` / `X 2` | Jump to a scene / force an expression for 20 s (screenshots) |
 | `P` | Dump the current frame (used by `tools/screenshot.py`) |
+| `K` / `U` | Keep a snapshot of the pet / restore it and undo fast-forwards (test on a copy) |
 | `R YES` | Start over with a new pet |
 
 ## Your conference badge is safe

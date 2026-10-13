@@ -54,14 +54,15 @@ Rect drawSweat(M5Canvas& c, const Pose& p, uint32_t ms) {
 
 Rect drawMesses(M5Canvas& c, const Pose& p, uint8_t count) {
   const float spots[3][2] = {{70, 450}, {450, 455}, {20, 470}};
+  Rect box;
   for (int i = 0; i < count && i < 3; i++) {
     int x, y; at(p, spots[i][0], spots[i][1], x, y);
     const int r = (int)(14 * p.scale / 0.6f);
     c.fillCircle(x, y, r + 2, INK); c.fillCircle(x, y, r, MESS);
     c.fillCircle(x, y - r, (int)(r * 0.7f) + 2, INK); c.fillCircle(x, y - r, (int)(r * 0.7f), MESS);
+    box = box.unite(around(x, y - r / 2, 2 * r + 4));
   }
-  int x0, y0; at(p, 240, 450, x0, y0);
-  return around(x0, y0, (int)(280 * p.scale));
+  return box;
 }
 
 Rect drawFoodBubble(M5Canvas& c, const Pose& p) {

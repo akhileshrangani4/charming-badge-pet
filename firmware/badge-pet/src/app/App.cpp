@@ -19,7 +19,10 @@ static store::Store st;
 static pet::PetState pet_;
 static power::PowerMgr pwr;
 
-static int64_t debugOffsetMin_ = 0;   // added by the F serial command so every time-gated rule can be tested
+static int64_t debugOffsetMin_ = 0;
+static pet::PetState snapshot_;   // K/U serial commands: test on a copy without hurting the real pet
+static int64_t snapshotOffset_ = 0;
+static bool hasSnapshot_ = false;   // added by the F serial command so every time-gated rule can be tested
 static int64_t cached = -1;
 static uint32_t readMs = 0;
 static int64_t goodMin = -1;      // last good RTC reading, and millis() when it was taken
@@ -128,6 +131,13 @@ void App::serialCommands() {
     Serial.printf("FRAME %d %d\n", render::SCREEN, render::SCREEN);
     Serial.write((const uint8_t*)c.getBuffer(), (size_t)render::SCREEN * render::SCREEN * 2);
     Serial.flush();
+  }
+  else if (line[0] == 'K') { snapshot_ = pet_; snapshotOffset_ = debugOffsetMin_; hasSnapshot_ = true; Serial.println("kept"); }
+  else if (line[0] == 'U' && hasSnapshot_) {   // restore the kept pet and undo any fast-forward since
+    debugOffsetMin_ = snapshotOffset_; cached = -1;
+    pet_ = snapshot_; pet::resyncClock(pet_, now()); st.save(pet_);
+    ui.debugGo(pet_.life == pet::Life::Gone ? scenes::SceneId::Gone : scenes::SceneId::Pet, millis());
+    Serial.println("restored");
   }
   else if (strncmp(line, "R YES", 5) == 0) { pet_ = pet::newPet(now()); st.save(pet_); Serial.println("new pet"); }
   else if (line[0] == 'S') {
