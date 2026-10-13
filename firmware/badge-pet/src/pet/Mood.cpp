@@ -1,0 +1,34 @@
+#include "Mood.h"
+#include "PetRules.h"
+namespace pet {
+Mood moodOf(const PetState& s) {
+  if (s.life == Life::Gone) return Mood::Gone;
+  if (s.paused) return Mood::Paused;
+  if (s.asleep) return Mood::Sleeping;
+  if (s.sick) return Mood::Sick;
+  if (s.tantrum) return Mood::Tantrum;
+  if (s.food < 25) return Mood::Hungry;
+  if (s.messes > 0 || s.hygiene < 25) return Mood::Dirty;
+  if (s.energy < 20) return Mood::Sleepy;
+  if (s.life == Life::Returning || s.trust < 30 || (s.wokeThisNight && isNight(s.lastMin))) return Mood::Grumpy;
+  if (s.joy < 25) return Mood::Sad;
+  if (s.joy > 70) return Mood::Happy;
+  return Mood::Content;
+}
+bool needsAttention(const PetState& s) {
+  if (s.life == Life::Gone || s.paused) return false;
+  return s.sick || s.tantrum || s.food < 15 || s.hygiene < 15 || s.joy < 15 || s.messes >= 2;
+}
+const char* phraseFor(Mood m) {
+  switch (m) {
+    case Mood::Hungry:  return "FEED ME";
+    case Mood::Sick:    return "I FEEL SICK";
+    case Mood::Dirty:   return "CLEAN UP?";
+    case Mood::Sleepy:  return "SO TIRED";
+    case Mood::Grumpy:  return "HMPH.";
+    case Mood::Sad:     return "PLAY WITH ME";
+    case Mood::Tantrum: return "NOW!!";
+    default:            return nullptr;
+  }
+}
+}
