@@ -7,3 +7,4 @@ tests/build/
 brain/node_modules/
 brain/.wrangler/
 brain/.dev.vars
+__pycache__/
