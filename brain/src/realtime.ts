@@ -97,7 +97,7 @@ export class RealtimeLink {
         break;
       case "response.output_audio_transcript.done": this.ev.petTranscript(String(e.transcript ?? "")); break;
       case "conversation.item.input_audio_transcription.completed": this.ev.userTranscript(String(e.transcript ?? "")); break;
-      case "error": this.ev.error("brain_fog"); break;
+      case "error": console.error("realtime error", JSON.stringify(e).slice(0, 500)); this.ev.error("brain_fog"); break;
       case "response.done": {
         this.responding = false;
         if (e.response?.usage) this.ev.usage(e.response.usage as RealtimeUsage);

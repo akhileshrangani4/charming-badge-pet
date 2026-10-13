@@ -82,7 +82,7 @@ export class PetBrain {
         if (this.overBudget()) { this.d.sendBadgeJson({ t: "error", code: "over_budget" }); return; }
         const link = this.ensureLink();
         this.d.sendBadgeJson({ t: "face", f: "listening" });
-        try { await link.ensure(); } catch { this.d.sendBadgeJson({ t: "error", code: "brain_fog" }); return; }
+        try { await link.ensure(); } catch (err) { console.error("realtime open failed", String(err)); this.d.sendBadgeJson({ t: "error", code: "brain_fog" }); return; }
         link.startTurn();
         break;
       }
