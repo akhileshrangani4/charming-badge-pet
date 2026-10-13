@@ -8,7 +8,7 @@ export interface Env {
   PET: DurableObjectNamespace<Pet>;
   OPENAI_API_KEY: string; ANTHROPIC_API_KEY: string; APP_SHARED_SECRET: string;
   CHARMING_WEBHOOK_URL?: string; CHARMING_WEBHOOK_KEY?: string;
-  REALTIME_MODEL: string; CLAUDE_MODEL: string; TRANSCRIBE_MODEL: string;
+  REALTIME_MODEL: string; CLAUDE_MODEL: string; CLAUDE_EFFORT: string; TRANSCRIBE_MODEL: string;
 }
 
 const hex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -43,7 +43,7 @@ export class Pet extends DurableObject<Env> {
           method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.CHARMING_WEBHOOK_KEY}` }, body: JSON.stringify(event),
         }).then(() => undefined, () => undefined));
       },
-      claudeModel: env.CLAUDE_MODEL, transcribeModel: env.TRANSCRIBE_MODEL,
+      claudeModel: env.CLAUDE_MODEL, claudeEffort: env.CLAUDE_EFFORT, transcribeModel: env.TRANSCRIBE_MODEL,
       sha256: async (s) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s))),
       randomToken: () => hex(crypto.getRandomValues(new Uint8Array(32)).buffer),
     });

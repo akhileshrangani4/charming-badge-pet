@@ -10,6 +10,7 @@ const RT: Record<string, { textIn: number; textCached: number; textOut: number; 
 const CLAUDE: Record<string, { in: number; cacheRead: number; out: number }> = {
   "claude-sonnet-5-5": { in: 2, cacheRead: 0.2, out: 10 },
   "claude-opus-5-5": { in: 4, cacheRead: 0.2, out: 20 },
+  "claude-haiku-5-5": { in: 0.1, cacheRead: 0.01, out: 0.5 },   // prompts up to 100K tokens
 };
 const M = 1_000_000;
 export function realtimeCost(model: string, u: RealtimeUsage): number {

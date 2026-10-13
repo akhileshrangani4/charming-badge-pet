@@ -10,7 +10,7 @@ export interface BrainDeps {
   sendBadgeJson(o: unknown): void; sendBadgeAudio(b: ArrayBuffer): void; closeBadge(): void;
   openUpstream(model: string): Promise<WsLike>; createMessage: CreateMessage;
   pushApp(event: { kind: "message"; message: Message } | { kind: "snapshot"; snapshot: Snapshot } | { kind: "card"; card: Card }): void;
-  claudeModel: string; transcribeModel: string;
+  claudeModel: string; claudeEffort?: string; transcribeModel: string;
   sha256(s: string): Promise<string>; randomToken(): string;
 }
 
@@ -34,7 +34,7 @@ export class PetBrain {
   }
   private card = (c: Card) => { this.lastCard = c; this.d.sendBadgeJson({ t: "card", ...c }); this.d.pushApp({ kind: "card", card: c }); };
   private async mind(channel: "voice" | "text", question: string) {
-    const r = await think({ create: this.d.createMessage, model: this.d.claudeModel, remember: (f) => this.d.store.addMemory(f, this.d.now()), showCard: this.card },
+    const r = await think({ create: this.d.createMessage, model: this.d.claudeModel, effort: this.d.claudeEffort, remember: (f) => this.d.store.addMemory(f, this.d.now()), showCard: this.card },
       { system: this.prompt(channel), history: this.d.store.recentMessages(30), question });
     this.addSpend(r.usd);
     return r.text;
@@ -107,7 +107,7 @@ export class PetBrain {
     this.lastCard = undefined;
     const history = this.d.store.recentMessages(30);
     this.d.store.addMessage("text", "user", text, this.d.now());
-    const r = await think({ create: this.d.createMessage, model: this.d.claudeModel, remember: (f) => this.d.store.addMemory(f, this.d.now()), showCard: this.card },
+    const r = await think({ create: this.d.createMessage, model: this.d.claudeModel, effort: this.d.claudeEffort, remember: (f) => this.d.store.addMemory(f, this.d.now()), showCard: this.card },
       { system: this.prompt("text"), history, question: text });
     this.addSpend(r.usd);
     this.d.store.addMessage("text", "pet", r.text, this.d.now());
@@ -146,7 +146,7 @@ export class PetBrain {
   async compact() {
     if (this.d.store.countMessages() <= 500) return { compacted: 0 };
     const old = this.d.store.oldestMessages(400);
-    const r = await think({ create: this.d.createMessage, model: this.d.claudeModel, remember: (f) => this.d.store.addMemory(f, this.d.now()), showCard: () => {} },
+    const r = await think({ create: this.d.createMessage, model: this.d.claudeModel, effort: this.d.claudeEffort, remember: (f) => this.d.store.addMemory(f, this.d.now()), showCard: () => {} },
       { system: "You condense a pet's chat log into durable memories. Call remember once per important fact about Avi or your shared life (at most 15). Then reply 'done'.", history: [], question: old.map((m) => `${m.role}: ${m.text}`).join("\n") });
     this.addSpend(r.usd);
     this.d.store.deleteMessagesThrough(old[old.length - 1].id);

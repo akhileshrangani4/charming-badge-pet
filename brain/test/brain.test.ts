@@ -15,7 +15,7 @@ function setup(replies: ClaudeReply[] = [{ content: [{ type: "text", text: "Hi!"
     store, now: () => Date.UTC(2026, 9, 12, 18, 0),
     sendBadgeJson: (o) => toBadge.push(o), sendBadgeAudio: (b) => toBadge.push({ audio: b.byteLength }), closeBadge: () => toBadge.push("closed"),
     openUpstream: async () => upstream, createMessage: claude, pushApp: (e) => pushed.push(e),
-    claudeModel: "claude-opus-5-5", transcribeModel: "gpt-transcribe", sha256: async (s) => `h:${s}`, randomToken: () => "tok123",
+    claudeModel: "claude-haiku-5-5", transcribeModel: "gpt-transcribe", sha256: async (s) => `h:${s}`, randomToken: () => "tok123",
   };
   return { brain: new PetBrain(deps), store, toBadge, pushed, upstream, claude };
 }

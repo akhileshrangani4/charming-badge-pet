@@ -30,7 +30,9 @@ export const MIND_TOOLS = [
   },
 ];
 
-export interface MindDeps { create: CreateMessage; model: string; remember(fact: string): void; showCard(card: Card): void }
+export interface MindDeps { create: CreateMessage; model: string; effort?: string; remember(fact: string): void; showCard(card: Card): void }
+// Server-side refusal fallbacks exist for Opus/Sonnet/Fable 5.x; Haiku 5.5 has none and must not send the parameter.
+const supportsFallbacks = (model: string) => /^claude-(opus|sonnet|fable)-5/.test(model);
 
 function toParams(history: Message[]): Array<{ role: "user" | "assistant"; content: string }> {
   // Merge consecutive same-role turns; the API needs alternating roles starting with the user.
@@ -56,7 +58,8 @@ export async function think(deps: MindDeps, req: { system: string; history: Mess
     for (let round = 0; round < 3; round++) {
       const r = await deps.create({
         model: deps.model, max_tokens: 2000, system: req.system, messages, tools: MIND_TOOLS,
-        betas: ["server-side-fallback-2026-07-01"], fallbacks: "default", output_config: { effort: "low" },
+        output_config: { effort: deps.effort ?? "medium" },
+        ...(supportsFallbacks(deps.model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } : {}),
       });
       usd += claudeCost(deps.model, r.usage);
       if (r.stop_reason === "refusal") return { text: "I'd rather not talk about that.", usd };

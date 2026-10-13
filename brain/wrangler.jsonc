@@ -7,7 +7,8 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Pet"] }],
   "vars": {
     "REALTIME_MODEL": "gpt-realtime-2.1",
-    "CLAUDE_MODEL": "claude-opus-5-5",
+    "CLAUDE_MODEL": "claude-haiku-5-5",
+    "CLAUDE_EFFORT": "medium",
     "TRANSCRIBE_MODEL": "gpt-transcribe"
   }
 }
