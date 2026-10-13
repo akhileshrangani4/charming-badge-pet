@@ -7,8 +7,7 @@
 #include <Preferences.h>
 #include <atomic>
 #include <string.h>
-#include <esp_heap_caps.h>
-static void heapLog(const char* tag) { Serial.printf("[%lu] heap %s: internal free %u, largest %u, psram free %u\n", millis(), tag, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM)); }
+#include "RootCAs.h"
 namespace net {
 static QueueHandle_t cmdQ, evtQ;
 static WifiManager wifi;
@@ -18,7 +17,6 @@ static std::atomic<float> level{0};
 static std::atomic<uint8_t> stat{(uint8_t)Status::NoWifi};
 static char token[65] = {0};
 static bool wsStarted = false, talking = false;
-static size_t sentBytes = 0;
 static SnapshotWire lastSnap{"content", 80, 80, 80, 100, 50, 0, "normal", false, 1, 0, 12, 100, false};
 
 static void emitStatus(Status s) {
@@ -29,7 +27,7 @@ static void emitStatus(Status s) {
 static void onWs(WStype_t type, uint8_t* payload, size_t len) {
   switch (type) {
     case WStype_CONNECTED: {
-      Serial.printf("[%lu] net: ws connected\n", millis()); heapLog("connected");
+      Serial.println("net: brain connected");
       emitStatus(Status::Online);
       char buf[1024]; Network nets[5]; const uint8_t k = wifi.count();
       for (uint8_t i = 0; i < k; i++) nets[i] = wifi.at(i);
@@ -38,21 +36,20 @@ static void onWs(WStype_t type, uint8_t* payload, size_t len) {
       break;
     }
     case WStype_DISCONNECTED:
-      Serial.printf("[%lu] net: ws disconnected\n", millis()); heapLog("disconnected");
+      Serial.println("net: brain disconnected");
       if (talking) { voice.stopRecording(); talking = false; }
       voice.stopPlayback();
       emitStatus(len >= 2 && payload && ((payload[0] << 8) | payload[1]) == 4001 ? Status::BadToken : Status::NoBrain);
       break;
     case WStype_TEXT: {
       Event e{Event::In, Status::Online, {}};
-      Serial.printf("[%lu] net: <- %.*s\n", millis(), (int)(len > 80 ? 80 : len), (const char*)payload);
       if (!parse((const char*)payload, len, e.in)) break;
       if (e.in.kind == Incoming::Networks && e.in.netCount > 0) wifi.setAll(e.in.nets, e.in.netCount);   // never wipe the list
       if (e.in.kind == Incoming::SayEnd) voice.flushPlayback();
       xQueueSend(evtQ, &e, 0);
       break;
     }
-    case WStype_BIN: { static uint32_t lastLog = 0; if (millis() - lastLog > 1000) { Serial.printf("[%lu] net: audio in %u\n", millis(), (unsigned)len); lastLog = millis(); } voice.enqueuePlayback(payload, len); break; }
+    case WStype_BIN: voice.enqueuePlayback(payload, len); break;
     case WStype_ERROR:
       // The library reports an HTTP 401 on upgrade here; treat it as a bad token
       if (payload && strstr((const char*)payload, "401")) emitStatus(Status::BadToken);
@@ -64,7 +61,7 @@ static void startWs() {
   if (wsStarted || !token[0]) return;
   static char hdr[96];
   snprintf(hdr, sizeof hdr, "Authorization: Bearer %s", token);
-  ws.beginSSL(BRAIN_HOST, 443, "/badge");
+  ws.beginSslWithCA(BRAIN_HOST, 443, "/badge", BRAIN_ROOT_CAS);   // verify the Worker's certificate
   ws.setExtraHeaders(hdr);
   ws.onEvent(onWs);
   ws.setReconnectInterval(5000);
@@ -73,9 +70,8 @@ static void startWs() {
 }
 static void task(void*) {
   Preferences p; p.begin("net", false); p.getString("token", token, sizeof token);
-  Serial.printf("[%lu] net: task start\n", millis());
   wifi.begin(); voice.begin();
-  Serial.printf("[%lu] net: ready, %u saved networks, token %s\n", millis(), wifi.count(), token[0] ? "set" : "missing");
+  Serial.printf("net: %u saved networks, token %s\n", wifi.count(), token[0] ? "set" : "missing");
   emitStatus(wifi.count() ? Status::Connecting : Status::NoWifi);
   wifi.connect();
   for (;;) {
@@ -92,13 +88,13 @@ static void task(void*) {
           }
           break;
         }
-        case Cmd::TalkStart: Serial.printf("[%lu] net: talk_start (ws %s)\n", millis(), ws.isConnected() ? "up" : "DOWN"); if (ws.isConnected()) { char b[32]; const size_t n = encodeType(b, sizeof b, "talk_start"); const bool ok = ws.sendTXT(b, n); Serial.printf("[%lu] net: talk_start sent=%d\n", millis(), ok); heapLog("talk_start"); voice.startRecording(); heapLog("mic started"); talking = true; } break;
-        case Cmd::TalkEnd: heapLog("talk_end before"); Serial.printf("[%lu] net: talk_end (recording %d, sent %u bytes)\n", millis(), talking, (unsigned)sentBytes); sentBytes = 0; if (talking) { voice.stopRecording(); talking = false; char b[32]; ws.sendTXT(b, encodeType(b, sizeof b, "talk_end")); heapLog("talk_end after speaker begin"); } break;
+        case Cmd::TalkStart: if (ws.isConnected()) { char b[32]; ws.sendTXT(b, encodeType(b, sizeof b, "talk_start")); voice.startRecording(); talking = true; } break;
+        case Cmd::TalkEnd: if (talking) { voice.stopRecording(); talking = false; char b[32]; ws.sendTXT(b, encodeType(b, sizeof b, "talk_end")); } break;
         case Cmd::TalkCancel: if (talking) { voice.stopRecording(); talking = false; } { char b[32]; if (ws.isConnected()) ws.sendTXT(b, encodeType(b, sizeof b, "talk_cancel")); } voice.stopPlayback(); break;
         case Cmd::SetToken: strncpy(token, c.text, 64); token[64] = 0; p.putString("token", token); if (wsStarted) { ws.disconnect(); wsStarted = false; } break;
         case Cmd::AddNetwork: {
           wifi.add(c.text, c.text2);
-          Serial.printf("[%lu] net: saved network '%s'\n", millis(), c.text);
+          Serial.printf("net: saved network '%s'\n", c.text);
           if (ws.isConnected()) { Network n{}; strncpy(n.ssid, c.text, 32); strncpy(n.psk, c.text2, 64); char b[160]; const size_t len = encodeAddNetwork(b, sizeof b, n); if (len) ws.sendTXT(b, len); }
           if (!wifi.connected()) wifi.connect();
           break;
@@ -111,7 +107,7 @@ static void task(void*) {
     if (wifi.connected()) { startWs(); ws.loop(); if (!ws.isConnected() && stat.load() == (uint8_t)Status::Online) emitStatus(Status::NoBrain); }
     else emitStatus(wifi.count() ? Status::Connecting : Status::NoWifi);
     const int16_t* chunk; size_t n;
-    while (talking && voice.recordChunk(chunk, n)) { ws.sendBIN((const uint8_t*)chunk, n * 2); sentBytes += n * 2; }
+    while (talking && voice.recordChunk(chunk, n)) { ws.sendBIN((const uint8_t*)chunk, n * 2); }
     voice.pumpPlayback();
     level = voice.level();
     vTaskDelay(1);

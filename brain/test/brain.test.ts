@@ -79,6 +79,33 @@ describe("PetBrain", () => {
     expect(await brain.chat("hi")).toEqual({ error: "over_budget" });
   });
 
+  it("enforces the monthly spend cap even when each day is under the daily cap", async () => {
+    const { brain, store, toBadge } = setup();
+    for (let d = 1; d <= 11; d++) store.addSpend(`2026-10-${String(d).padStart(2, "0")}`, 1.9);   // $20.90 this month
+    store.addSpend("2026-09-30", 50);   // last month does not count
+    await brain.onBadgeJson(JSON.stringify({ t: "talk_start" }));
+    expect(toBadge).toContainEqual({ t: "error", code: "over_budget" });
+    expect(await brain.chat("hi")).toEqual({ error: "over_budget" });
+  });
+
+  it("limits turns per hour so a stuck button or a leaked secret cannot burn the keys", async () => {
+    const { brain, toBadge } = setup();
+    for (let i = 0; i < 40; i++) { await brain.onBadgeJson(JSON.stringify({ t: "talk_start" })); await brain.onBadgeJson(JSON.stringify({ t: "talk_cancel" })); }
+    expect(toBadge).not.toContainEqual({ t: "error", code: "busy" });
+    await brain.onBadgeJson(JSON.stringify({ t: "talk_start" }));
+    expect(toBadge).toContainEqual({ t: "error", code: "busy" });
+    for (let i = 0; i < 60; i++) expect(await brain.chat("hi")).not.toEqual({ error: "busy" });
+    expect(await brain.chat("hi")).toEqual({ error: "busy" });
+  });
+
+  it("ignores badge audio past 30 s in one turn", async () => {
+    const { brain, upstream } = setup();
+    await brain.onBadgeJson(JSON.stringify({ t: "talk_start" }));
+    const chunk = new Uint8Array(48_000).buffer;   // 1 s of 24 kHz 16-bit mono
+    for (let i = 0; i < 35; i++) brain.onBadgeAudio(chunk);
+    expect(upstream.types().filter((t) => t === "input_audio_buffer.append").length).toBe(30);
+  });
+
   it("token: rotate returns a new token once; only the matching token passes", async () => {
     const { brain } = setup();
     expect(await brain.checkToken("anything")).toBe(false);   // no token issued yet

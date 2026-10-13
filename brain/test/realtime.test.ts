@@ -27,6 +27,7 @@ describe("RealtimeLink", () => {
     expect(s.audio.input.format).toEqual({ type: "audio/pcm", rate: 24000 });
     expect(s.audio.output.voice).toBe("coral");
     expect(s.tools[0].name).toBe("think");
+    expect(s.max_output_tokens).toBe(1500);   // about 30 s of speech: a runaway reply stops there
   });
 
   it("a voice turn: append, commit, create, then audio and transcripts come back", async () => {

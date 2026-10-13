@@ -26,3 +26,5 @@ export function claudeCost(model: string, u: { input_tokens: number; output_toke
   return (u.input_tokens * p.in + (u.cache_read_input_tokens ?? 0) * p.cacheRead + u.output_tokens * p.out) / M;
 }
 export function dayKey(ms: number): string { return new Date(ms).toISOString().slice(0, 10); }
+export function monthKey(ms: number): string { return dayKey(ms).slice(0, 7); }
+export function hourKey(ms: number): string { return new Date(ms).toISOString().slice(0, 13); }

@@ -58,7 +58,6 @@ export class Pet extends DurableObject<Env> {
       this.ctx.getWebSockets("badge").forEach((w) => w.close(4000, "replaced by a newer connection"));
       const [client, server] = Object.values(new WebSocketPair());
       this.ctx.acceptWebSocket(server, ["badge"]);
-      console.log("badge socket opened");
       this.brain.onBadgeOpen();
       return new Response(null, { status: 101, webSocket: client });
     }
@@ -78,5 +77,5 @@ export class Pet extends DurableObject<Env> {
   async webSocketMessage(_ws: WebSocket, msg: string | ArrayBuffer) {
     if (typeof msg === "string") await this.brain.onBadgeJson(msg); else this.brain.onBadgeAudio(msg);
   }
-  async webSocketClose(_ws: WebSocket, code: number) { console.log("badge socket closed", code); this.brain.onBadgeClose(); }
+  async webSocketClose(_ws: WebSocket, _code: number) { this.brain.onBadgeClose(); }
 }

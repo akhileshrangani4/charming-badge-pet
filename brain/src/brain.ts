@@ -1,9 +1,12 @@
 import { think, type CreateMessage } from "./mind";
 import { buildSystemPrompt } from "./personality";
 import { RealtimeLink, type WsLike } from "./realtime";
-import { dayKey, realtimeCost } from "./spend";
+import { dayKey, hourKey, monthKey, realtimeCost } from "./spend";
 import type { PetStore } from "./store";
 import type { Card, Message, NetworkEntry, Settings, Snapshot } from "./types";
+
+const TURNS_PER_HOUR = { voice: 40, text: 60 };
+const MAX_TURN_AUDIO_BYTES = 30 * 24_000 * 2;   // 30 s of 24 kHz 16-bit mono; the badge caps a turn at 30 s too
 
 export interface BrainDeps {
   store: PetStore; now(): number;
@@ -25,7 +28,14 @@ export class PetBrain {
   private prompt(channel: "voice" | "text") {
     return buildSystemPrompt(this.d.store.snapshot()?.snapshot ?? null, this.d.store.settings(), this.d.store.memories(), this.hourLocal(), channel);
   }
-  private overBudget() { return this.d.store.spend(dayKey(this.d.now())) >= this.d.store.settings().dailyCapUsd; }
+  private overBudget() {
+    const now = this.d.now(), s = this.d.store.settings();
+    return this.d.store.spend(dayKey(now)) >= s.dailyCapUsd || this.d.store.spendMonth(monthKey(now)) >= s.monthlyCapUsd;
+  }
+  // A hard ceiling on turns per hour, so a stuck button or a leaked secret cannot run up the bill.
+  private overRate(channel: "voice" | "text") {
+    return this.d.store.bumpTurns(hourKey(this.d.now()), channel) > TURNS_PER_HOUR[channel];
+  }
   private addSpend(usd: number) { if (usd > 0) this.d.store.addSpend(dayKey(this.d.now()), usd); }
   private message(channel: Message["channel"], role: Message["role"], text: string) {
     if (!text.trim()) return;
@@ -48,7 +58,7 @@ export class PetBrain {
       {
         audio: (b) => this.d.sendBadgeAudio(b),
         face: (f) => this.d.sendBadgeJson({ t: "face", f }),
-        done: () => { console.log("reply done"); this.d.sendBadgeJson({ t: "say_end" }); this.armIdle(); },
+        done: () => { this.d.sendBadgeJson({ t: "say_end" }); this.armIdle(); },
         userTranscript: (t) => this.message("voice", "user", t),
         petTranscript: (t) => this.message("voice", "pet", t),
         usage: (u) => this.addSpend(realtimeCost(settings.realtimeModel, u)),
@@ -69,7 +79,6 @@ export class PetBrain {
   async onBadgeJson(text: string) {
     let m: { t?: string; snapshot?: Snapshot; [k: string]: unknown };
     try { m = JSON.parse(text); } catch { return; }
-    if (m.t !== "snapshot") console.log("badge:", m.t);
     switch (m.t) {
       case "hello":
         if (m.snapshot) this.setSnapshot(m.snapshot);
@@ -81,19 +90,24 @@ export class PetBrain {
       case "talk_start": {
         if (this.idle) clearTimeout(this.idle);
         if (this.overBudget()) { this.d.sendBadgeJson({ t: "error", code: "over_budget" }); return; }
+        if (this.overRate("voice")) { this.d.sendBadgeJson({ t: "error", code: "busy" }); return; }
+        this.audioIn = 0;
         const link = this.ensureLink();
         this.d.sendBadgeJson({ t: "face", f: "listening" });
         try { await link.ensure(); } catch (err) { console.error("realtime open failed", String(err)); this.d.sendBadgeJson({ t: "error", code: "brain_fog" }); return; }
         link.startTurn();
         break;
       }
-      case "talk_end": console.log("badge audio bytes this turn:", this.audioIn); this.audioIn = 0; this.link?.endTurn(); break;
+      case "talk_end": this.audioIn = 0; this.link?.endTurn(); break;
       case "talk_cancel": this.link?.cancelTurn(); this.d.sendBadgeJson({ t: "face", f: "idle" }); this.armIdle(); break;
       default: return;
     }
   }
   private audioIn = 0;
-  onBadgeAudio(buf: ArrayBuffer) { this.audioIn += buf.byteLength; this.link?.appendAudio(buf); }
+  onBadgeAudio(buf: ArrayBuffer) {
+    if (this.audioIn + buf.byteLength > MAX_TURN_AUDIO_BYTES) return;   // past the turn's cap: dropped, never billed
+    this.audioIn += buf.byteLength; this.link?.appendAudio(buf);
+  }
   onBadgeClose() { this.link?.cancelTurn(); this.armIdle(); }
   private setSnapshot(s: Snapshot) {
     this.d.store.setSnapshot(s, this.d.now());
@@ -104,6 +118,7 @@ export class PetBrain {
   // ---- app routes ----
   async chat(text: string): Promise<{ reply: string; card?: Card } | { error: string }> {
     if (this.overBudget()) return { error: "over_budget" };
+    if (this.overRate("text")) return { error: "busy" };
     this.lastCard = undefined;
     const history = this.d.store.recentMessages(30);
     this.d.store.addMessage("text", "user", text, this.d.now());
@@ -117,7 +132,7 @@ export class PetBrain {
     const s = this.d.store.snapshot();
     return {
       snapshot: s?.snapshot ?? null, snapshotTs: s?.ts ?? null, settings: this.d.store.settings(),
-      spendToday: this.d.store.spend(dayKey(this.d.now())),
+      spendToday: this.d.store.spend(dayKey(this.d.now())), spendMonth: this.d.store.spendMonth(monthKey(this.d.now())),
       networks: this.d.store.networks().map((n) => ({ ssid: n.ssid })),
       messages: this.d.store.recentMessages(100),
     };

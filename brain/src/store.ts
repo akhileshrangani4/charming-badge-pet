@@ -10,6 +10,7 @@ export class PetStore {
     sql.exec("CREATE TABLE IF NOT EXISTS networks (ssid TEXT PRIMARY KEY, psk TEXT, ts INTEGER)");
     sql.exec("CREATE TABLE IF NOT EXISTS spend (day TEXT PRIMARY KEY, usd REAL)");
     sql.exec("CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT)");
+    sql.exec("CREATE TABLE IF NOT EXISTS turns (hour TEXT, channel TEXT, n INTEGER, PRIMARY KEY (hour, channel))");
   }
   private kvGet(k: string): string | null {
     const r = this.sql.exec("SELECT v FROM kv WHERE k = ?", k).toArray();
@@ -48,6 +49,13 @@ export class PetStore {
   }
 
   spend(day: string): number { const r = this.sql.exec("SELECT usd FROM spend WHERE day = ?", day).toArray(); return r.length ? Number(r[0].usd) : 0; }
+  spendMonth(month: string): number { const r = this.sql.exec("SELECT SUM(usd) AS usd FROM spend WHERE day LIKE ?", `${month}-%`).toArray(); return Number(r[0]?.usd ?? 0); }
+  // Counts one turn in this hour for the channel and returns the new count; older hours are dropped.
+  bumpTurns(hour: string, channel: string): number {
+    this.sql.exec("DELETE FROM turns WHERE hour != ?", hour);
+    this.sql.exec("INSERT INTO turns (hour, channel, n) VALUES (?, ?, 1) ON CONFLICT(hour, channel) DO UPDATE SET n = n + 1", hour, channel);
+    return Number(this.sql.exec("SELECT n FROM turns WHERE hour = ? AND channel = ?", hour, channel).toArray()[0].n);
+  }
   addSpend(day: string, usd: number) { this.sql.exec("INSERT INTO spend (day, usd) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET usd = usd + excluded.usd", day, usd); }
 
   tokenHash(): string | null { return this.kvGet("tokenHash"); }

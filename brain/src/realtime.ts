@@ -47,7 +47,7 @@ export class RealtimeLink {
             description: "Ask your deeper mind about anything that needs memory, facts, planning, or showing something on the badge screen. Say a very short in-character filler line first.",
             parameters: { type: "object", properties: { question: { type: "string" } }, required: ["question"] },
           }],
-          tool_choice: "auto",
+          tool_choice: "auto", max_output_tokens: 1500,
         },
       });
     });
