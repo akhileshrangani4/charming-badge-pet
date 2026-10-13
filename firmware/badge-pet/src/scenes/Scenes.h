@@ -21,6 +21,7 @@ class Scenes {
     display::Content k; k.title = cardTitle_; k.body = cardBody_[0] ? cardBody_ : nullptr; k.qr = cardQr_[0] ? cardQr_ : nullptr; k.ttlMs = cardQr_[0] ? 20000 : 6000;
     showMessage(k, ms);
   }
+  void setBattery(int level, bool charging) { battery_ = level; charging_ = charging; }
   void showStatus(const char* title, uint32_t ms) { display::Content k; k.title = title; k.ttlMs = 2000; showMessage(k, ms); }
   Scenes(M5Canvas& c, render::TextLayer& t, render::Mascot& m) : c_(&c), t_(t), m_(m) {}
   // Double buffering: draw() renders into canvas `slot` (0/1); each canvas still holds the frame from two draws ago.
@@ -36,6 +37,8 @@ class Scenes {
   void debugExpression(int e, uint32_t untilMs) { forcedExpr_ = e; forcedUntil_ = untilMs; }
  private:
   net::Face talkFace_ = net::Face::Idle;
+  int battery_ = -1; bool charging_ = false;   // -1 until the first reading
+  render::Rect drawBattery();
   char cardTitle_[24] = {0}, cardBody_[64] = {0}, cardQr_[121] = {0};
   void go(SceneId id, uint32_t ms) { if (scene_ != id) { scene_ = id; full_ = true; } enteredMs_ = ms; }
   render::Rect drawn_[2];      // what each canvas last drew

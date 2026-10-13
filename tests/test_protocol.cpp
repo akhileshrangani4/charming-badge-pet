@@ -39,13 +39,15 @@ TEST_CASE("rejects malformed or unknown input") {
   REQUIRE(P(many, in)); CHECK(in.netCount == 5);
 }
 TEST_CASE("encodes hello, snapshot and plain types") {
-  SnapshotWire s{"happy", 90, 80, 95, 100, 70, 0, "normal", false, 2, 1, 14};
+  SnapshotWire s{"happy", 90, 80, 95, 100, 70, 0, "normal", false, 2, 1, 14, 76, true};
   char buf[512];
   Network n[1] = {{"home", "pw"}};
   REQUIRE(encodeHello(buf, sizeof buf, "2.0.0", s, n, 1) > 0);
   CHECK(std::string(buf).find("\"t\":\"hello\"") != std::string::npos);
   CHECK(std::string(buf).find("\"networks\":[{\"ssid\":\"home\"") != std::string::npos);
   CHECK(std::string(buf).find("\"hour\":14") != std::string::npos);
+  CHECK(std::string(buf).find("\"battery\":76") != std::string::npos);
+  CHECK(std::string(buf).find("\"charging\":true") != std::string::npos);
   CHECK(std::string(buf).find("\"mood\":\"happy\"") != std::string::npos);
   REQUIRE(encodeSnapshot(buf, sizeof buf, s) > 0);
   CHECK(std::string(buf).find("\"t\":\"snapshot\"") != std::string::npos);

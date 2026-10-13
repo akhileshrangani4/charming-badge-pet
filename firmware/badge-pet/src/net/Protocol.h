@@ -11,7 +11,7 @@ struct Incoming {
   Face face = Face::Idle; Card card{}; Err err = Err::Other; Network nets[5]{}; uint8_t netCount = 0;
 };
 bool parse(const char* json, size_t n, Incoming& out);
-struct SnapshotWire { const char* mood; float food, energy, joy, hygiene, trust; uint8_t sick; const char* life; bool asleep; uint16_t ageDays; uint8_t growth; uint8_t hour; };
+struct SnapshotWire { const char* mood; float food, energy, joy, hygiene, trust; uint8_t sick; const char* life; bool asleep; uint16_t ageDays; uint8_t growth; uint8_t hour; uint8_t battery; bool charging; };
 size_t encodeHello(char* buf, size_t cap, const char* fw, const SnapshotWire& s, const Network* nets = nullptr, uint8_t netCount = 0);
 size_t encodeAddNetwork(char* buf, size_t cap, const Network& n);
 size_t encodeSnapshot(char* buf, size_t cap, const SnapshotWire& s);

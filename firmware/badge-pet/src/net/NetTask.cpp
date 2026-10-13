@@ -19,7 +19,7 @@ static std::atomic<uint8_t> stat{(uint8_t)Status::NoWifi};
 static char token[65] = {0};
 static bool wsStarted = false, talking = false;
 static size_t sentBytes = 0;
-static SnapshotWire lastSnap{"content", 80, 80, 80, 100, 50, 0, "normal", false, 1, 0, 12};
+static SnapshotWire lastSnap{"content", 80, 80, 80, 100, 50, 0, "normal", false, 1, 0, 12, 100, false};
 
 static void emitStatus(Status s) {
   if ((uint8_t)s == stat.load()) return;

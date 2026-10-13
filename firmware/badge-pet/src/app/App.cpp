@@ -74,6 +74,8 @@ static void submit(M5Canvas& c, const render::Rect& r0) {
   xQueueSend(pushQueue, &job, portMAX_DELAY);
 }
 
+static int batteryLevel = 100; static bool batteryCharging = false;
+static int battOverride = -1; static bool battOverrideChg = false;   // serial V, for screenshots
 static const char* moodName(pet::Mood m) {
   static const char* names[] = {"gone", "paused", "sleeping", "sick", "tantrum", "hungry", "dirty", "sleepy", "grumpy", "sad", "happy", "content"};
   return names[(int)m];
@@ -81,7 +83,7 @@ static const char* moodName(pet::Mood m) {
 static net::SnapshotWire wireOf(const pet::PetState& s) {
   return {moodName(pet::moodOf(s)), s.food, s.energy, s.joy, s.hygiene, s.trust, s.sick,
           s.life == pet::Life::Gone ? "gone" : (s.life == pet::Life::Returning ? "returning" : "normal"),
-          s.asleep, (uint16_t)(s.ageMin / 1440), s.growth, (uint8_t)pet::hourOf(s.lastMin)};
+          s.asleep, (uint16_t)(s.ageMin / 1440), s.growth, (uint8_t)pet::hourOf(s.lastMin), (uint8_t)batteryLevel, batteryCharging};
 }
 static void postSnapshot(bool hello) { net::Cmd c{}; c.kind = hello ? net::Cmd::Hello : net::Cmd::Snapshot; c.snap = wireOf(pet_); net::post(c); }
 static void stopNet() { net::Cmd stop{}; stop.kind = net::Cmd::Stop; net::post(stop); delay(300); }   // Wi-Fi off before deep sleep
@@ -145,6 +147,7 @@ void App::serialCommands() {
   else if (sscanf(line, "F %d", &mins) == 1) { debugOffsetMin_ += mins; ui.onEvents(pet::catchUp(pet_, now()), pet_, millis()); Serial.println("forwarded"); }
   else if (sscanf(line, "G %d", &mins) == 1) { ui.debugGo((scenes::SceneId)mins, millis()); Serial.println("scene"); }
   else if (sscanf(line, "X %d", &mins) == 1) { ui.debugExpression(mins, millis() + 20000); Serial.println("expr"); }
+  else if (line[0] == 'V') { int lvl, chg; if (sscanf(line + 1, "%d %d", &lvl, &chg) == 2) { battOverride = lvl; battOverrideChg = chg; Serial.println("battery override"); } else { battOverride = -1; Serial.println("battery live"); } }   // debug: V <level> <charging>, V alone = live
   else if (line[0] == 'J') { simTalkUntil = millis() + 3000; net::Cmd c{}; c.kind = net::Cmd::TalkStart; net::post(c); ui.setTalkFace(net::Face::Listening); Serial.println("sim talk"); }   // simulate a 3 s push-to-talk
   else if (line[0] == 'Z') { fullPush = !fullPush; Serial.printf("full-screen push %s\n", fullPush ? "on" : "off"); }
   else if (line[0] == 'Q') {   // dump what the display framebuffer holds (not our canvas): "FRAME w h" + BE RGB565
@@ -231,6 +234,17 @@ void App::loop() {
     }
   }
   mascot.setMouth(net::speakingLevel());
+  static uint32_t lastBatt = 0; static bool warnedLow = false;
+  if (!lastBatt || ms - lastBatt > 10000 || battOverride >= 0) {   // the power chip is on I2C: read every 10 s
+    lastBatt = ms;
+    const int lvl = M5.Power.getBatteryLevel();
+    if (lvl >= 0) batteryLevel = lvl;
+    batteryCharging = M5.Power.isCharging() == m5::Power_Class::is_charging;
+    if (battOverride >= 0) { batteryLevel = battOverride; batteryCharging = battOverrideChg; }
+    ui.setBattery(batteryLevel, batteryCharging);
+    if (batteryLevel < 20 && !batteryCharging && !warnedLow) { warnedLow = true; ui.showStatus("LOW BATTERY", ms); }
+    if (batteryLevel >= 25 || batteryCharging) warnedLow = false;
+  }
   ev |= ui.handle(f, pet_, now(), ms);
   if (ev) ui.onEvents(ev, pet_, ms);
   static pet::Mood lastMood = pet::Mood::Content;

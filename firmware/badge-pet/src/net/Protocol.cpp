@@ -47,6 +47,7 @@ static void fillSnapshot(JsonObject o, const SnapshotWire& s) {
   o["mood"] = s.mood; o["food"] = (int)s.food; o["energy"] = (int)s.energy; o["joy"] = (int)s.joy;
   o["hygiene"] = (int)s.hygiene; o["trust"] = (int)s.trust; o["sick"] = s.sick; o["life"] = s.life;
   o["asleep"] = s.asleep; o["ageDays"] = s.ageDays; o["growth"] = s.growth; o["hour"] = s.hour;
+  o["battery"] = s.battery; o["charging"] = s.charging;
 }
 static size_t finish(JsonDocument& doc, char* buf, size_t cap) {
   if (measureJson(doc) + 1 > cap) return 0;

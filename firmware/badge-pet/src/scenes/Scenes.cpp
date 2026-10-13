@@ -133,11 +133,28 @@ void Scenes::drawMenu() {
   }
 }
 
+// Top-of-rim battery: only while charging or below 20% (the pet screen otherwise shows just the mascot).
+Rect Scenes::drawBattery() {
+  if (battery_ < 0 || (!charging_ && battery_ >= 20)) return {};
+  const int x = CENTER - 14, y = 16, w = 26, h = 12;
+  const uint32_t col = charging_ ? UI : (battery_ < 10 ? ALERT : DIM);
+  c_->drawRoundRect(x, y, w, h, 3, col); c_->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 2, col);
+  c_->fillRect(x + w, y + 3, 3, h - 6, col);
+  const int fill = (w - 6) * (battery_ < 0 ? 0 : battery_) / 100;
+  if (fill > 0) c_->fillRect(x + 3, y + 3, fill, h - 6, col);
+  if (charging_) {   // small bolt to the right of the battery
+    const int bx = x + w + 9, by = y - 1;
+    c_->fillTriangle(bx + 4, by, bx - 1, by + 8, bx + 3, by + 8, UI);
+    c_->fillTriangle(bx + 1, by + 14, bx + 6, by + 6, bx + 2, by + 6, UI);
+  }
+  return Rect{(int16_t)(x - 2), (int16_t)(y - 3), (int16_t)(w + 22), (int16_t)(h + 8)};
+}
+
 Rect Scenes::drawStatus(const pet::PetState& s) {
   const char* names[] = {"FOOD", "ENERGY", "JOY", "CLEAN"};
   const float vals[] = {s.food, s.energy, s.joy, s.hygiene};
   for (int i = 0; i < 4; i++) {
-    const int y = 90 + i * 44;
+    const int y = 78 + i * 40;
     t_.text(*c_, Font::Mono15, names[i], y, DIM);
     c_->fillSmoothRoundRect(CENTER - 90, y + 12, 180, 8, 4, 0x262626u);
     const int w = (int)(180 * vals[i] / 100);
@@ -145,7 +162,12 @@ Rect Scenes::drawStatus(const pet::PetState& s) {
   }
   char line[32];
   snprintf(line, sizeof line, "DAY %u  %s", (unsigned)(s.ageMin / 1440 + 1), s.sick ? "SICK" : (s.trust < 30 ? "WARY" : "OK"));
-  return t_.text(*c_, Font::Mono15, line, 280, DIM).unite(Rect{(int16_t)(CENTER - 92), 80, 184, 190});
+  Rect r = t_.text(*c_, Font::Mono15, line, 250, DIM).unite(Rect{(int16_t)(CENTER - 92), 66, 184, 172});
+  if (battery_ >= 0) {
+    snprintf(line, sizeof line, "BATTERY %d%%%s", battery_, charging_ ? "  CHARGING" : "");
+    r = r.unite(t_.text(*c_, Font::Mono15, line, 274, battery_ < 20 && !charging_ ? ALERT : DIM));
+  }
+  return r;
 }
 
 Rect Scenes::draw(const pet::PetState& s, uint32_t ms) {
@@ -198,6 +220,7 @@ Rect Scenes::draw(const pet::PetState& s, uint32_t ms) {
     }
     if (scene_ == SceneId::Message) dirty = dirty.unite(drawContent(*c_, t_, msg_));
     if (scene_ == SceneId::Play) dirty = dirty.unite(play_.drawSparks(*c_));
+    if (scene_ == SceneId::Pet || scene_ == SceneId::Menu) dirty = dirty.unite(drawBattery());
   }
   // The screen currently shows the other canvas's frame, so the push must cover both.
   Rect push = dirty.unite(drawn_[slot_ ^ 1]);
