@@ -15,7 +15,9 @@ class WifiManager {
  private:
   void save();
   Network list_[5]{}; uint8_t n_ = 0;
+  int8_t last_ = -1;   // index of the last network that connected; tried first, no scan
   enum class S : uint8_t { Idle, Scanning, Joining, Up } s_ = S::Idle;
+  bool direct_ = false;   // current join skipped the scan
   uint32_t t0_ = 0;
 };
 }

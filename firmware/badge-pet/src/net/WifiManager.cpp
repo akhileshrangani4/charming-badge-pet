@@ -9,6 +9,8 @@ void WifiManager::begin() {
   n_ = (uint8_t)(prefs.getBytes("list", list_, sizeof list_) / sizeof(Network));
   if (n_ > 5) n_ = 0;
   while (n_ > 0 && !list_[n_ - 1].ssid[0]) n_--;
+  last_ = (int8_t)prefs.getChar("last", -1);
+  if (last_ >= (int8_t)n_) last_ = -1;
 }
 void WifiManager::save() { prefs.putBytes("list", list_, sizeof(Network) * n_); }
 void WifiManager::add(const char* ssid, const char* psk) {
@@ -18,12 +20,17 @@ void WifiManager::add(const char* ssid, const char* psk) {
   strncpy(list_[n_].psk, psk, 64); list_[n_].psk[64] = 0;
   n_++; save();
 }
-void WifiManager::setAll(const Network* l, uint8_t n) { n_ = n > 5 ? 5 : n; memcpy(list_, l, sizeof(Network) * n_); save(); }
+void WifiManager::setAll(const Network* l, uint8_t n) { n_ = n > 5 ? 5 : n; if (n_) memcpy(list_, l, sizeof(Network) * n_); save(); }
 void WifiManager::connect() {
   if (!n_) return;
-  WiFi.mode(WIFI_STA); WiFi.setSleep(true);
+  WiFi.mode(WIFI_STA); WiFi.setSleep(true); WiFi.setAutoReconnect(true);
+  if (last_ >= 0 && last_ < (int8_t)n_) {   // fast path: the network that worked last time, no scan
+    WiFi.begin(list_[last_].ssid, list_[last_].psk);
+    s_ = S::Joining; direct_ = true; t0_ = millis();
+    return;
+  }
   WiFi.scanNetworks(true);
-  s_ = S::Scanning; t0_ = millis();
+  s_ = S::Scanning; direct_ = false; t0_ = millis();
 }
 void WifiManager::poll() {
   if (s_ == S::Scanning) {
@@ -36,10 +43,14 @@ void WifiManager::poll() {
     WiFi.scanDelete();
     if (best < 0) { s_ = S::Idle; t0_ = millis(); return; }   // nothing known in range; retried by the task
     WiFi.begin(list_[best].ssid, list_[best].psk);
-    s_ = S::Joining; t0_ = millis();
+    s_ = S::Joining; direct_ = false; last_ = (int8_t)best; t0_ = millis();
   } else if (s_ == S::Joining) {
-    if (WiFi.status() == WL_CONNECTED) s_ = S::Up;
-    else if (millis() - t0_ > 15000) { WiFi.disconnect(); s_ = S::Idle; }
+    if (WiFi.status() == WL_CONNECTED) { s_ = S::Up; prefs.putChar("last", last_); }
+    else if (millis() - t0_ > (direct_ ? 8000u : 15000u)) {
+      WiFi.disconnect();
+      if (direct_) { last_ = -1; WiFi.scanNetworks(true); s_ = S::Scanning; direct_ = false; t0_ = millis(); }   // fall back to a scan
+      else s_ = S::Idle;
+    }
   } else if (s_ == S::Up && WiFi.status() != WL_CONNECTED) {
     s_ = S::Idle;
   } else if (s_ == S::Idle && n_ && millis() - t0_ > 10000) {

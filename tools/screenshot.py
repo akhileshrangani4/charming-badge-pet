@@ -2,8 +2,8 @@
 import sys, time, glob, serial
 from PIL import Image, ImageDraw
 
-def frame(s):
-    s.reset_input_buffer(); s.write(b"P\n")
+def frame(s, cmd=b"P"):
+    s.reset_input_buffer(); s.write(cmd + b"\n")
     t0 = time.time(); buf = b""
     while b"FRAME" not in buf and time.time() - t0 < 5:
         buf += s.read(256)

@@ -67,7 +67,9 @@ static void startWs() {
 }
 static void task(void*) {
   Preferences p; p.begin("net", false); p.getString("token", token, sizeof token);
+  Serial.println("net: task start");
   wifi.begin(); voice.begin();
+  Serial.printf("net: ready, %u saved networks, token %s\n", wifi.count(), token[0] ? "set" : "missing");
   emitStatus(wifi.count() ? Status::Connecting : Status::NoWifi);
   wifi.connect();
   for (;;) {
@@ -90,10 +92,12 @@ static void task(void*) {
         case Cmd::SetToken: strncpy(token, c.text, 64); token[64] = 0; p.putString("token", token); if (wsStarted) { ws.disconnect(); wsStarted = false; } break;
         case Cmd::AddNetwork: {
           wifi.add(c.text, c.text2);
+          Serial.printf("net: saved network '%s'\n", c.text);
           if (ws.isConnected()) { Network n{}; strncpy(n.ssid, c.text, 32); strncpy(n.psk, c.text2, 64); char b[160]; const size_t len = encodeAddNetwork(b, sizeof b, n); if (len) ws.sendTXT(b, len); }
           if (!wifi.connected()) wifi.connect();
           break;
         }
+        case Cmd::ClearNetworks: wifi.setAll(nullptr, 0); break;
         case Cmd::Stop: if (wsStarted) ws.disconnect(); wifi.off(); vTaskDelete(nullptr); break;
       }
     }

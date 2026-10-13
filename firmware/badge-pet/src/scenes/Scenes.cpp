@@ -190,11 +190,13 @@ Rect Scenes::draw(const pet::PetState& s, uint32_t ms) {
     // Text areas count as dirty so they are cleared and pushed with the frame (live status bars, no
     // anti-aliased text drawn over itself where it meets the mascot's clear area).
     if (scene_ == SceneId::Status) dirty = dirty.unite(drawStatus(s));
-    if (scene_ == SceneId::NameTag && fullFrame) {
+    // Text screens redraw their text every frame as part of the dirty area. Drawing it only on full
+    // frames let the mascot's clear area (its hop and sparkles) erase parts of it: the "black box".
+    if (scene_ == SceneId::NameTag) {
       display::Content k; k.label = "HELLO, I'M"; k.title = "AKHILESH"; k.body = "Founding Engineer @Charming";
-      drawContent(*c_, t_, k);
+      dirty = dirty.unite(drawContent(*c_, t_, k));
     }
-    if (scene_ == SceneId::Message && fullFrame) drawContent(*c_, t_, msg_);
+    if (scene_ == SceneId::Message) dirty = dirty.unite(drawContent(*c_, t_, msg_));
     if (scene_ == SceneId::Play) dirty = dirty.unite(play_.drawSparks(*c_));
   }
   // The screen currently shows the other canvas's frame, so the push must cover both.

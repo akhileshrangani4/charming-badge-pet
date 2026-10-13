@@ -63,7 +63,9 @@ static void pushTask(void*) {
   }
 }
 static void waitDisplayIdle() { xSemaphoreTake(pushIdle, portMAX_DELAY); xSemaphoreGive(pushIdle); }
-static void submit(M5Canvas& c, const render::Rect& r) {
+static bool fullPush = false;   // diagnostic (serial Z): send the whole screen every frame
+static void submit(M5Canvas& c, const render::Rect& r0) {
+  const render::Rect r = fullPush ? render::Rect{0, 0, render::SCREEN, render::SCREEN} : r0;
   xSemaphoreTake(pushIdle, portMAX_DELAY);   // the previous frame must be on screen before this canvas is handed off
   if (r.empty()) { xSemaphoreGive(pushIdle); return; }
   PushJob job{&c, r};
@@ -141,6 +143,18 @@ void App::serialCommands() {
   else if (sscanf(line, "F %d", &mins) == 1) { debugOffsetMin_ += mins; ui.onEvents(pet::catchUp(pet_, now()), pet_, millis()); Serial.println("forwarded"); }
   else if (sscanf(line, "G %d", &mins) == 1) { ui.debugGo((scenes::SceneId)mins, millis()); Serial.println("scene"); }
   else if (sscanf(line, "X %d", &mins) == 1) { ui.debugExpression(mins, millis() + 20000); Serial.println("expr"); }
+  else if (line[0] == 'Z') { fullPush = !fullPush; Serial.printf("full-screen push %s\n", fullPush ? "on" : "off"); }
+  else if (line[0] == 'Q') {   // dump what the display framebuffer holds (not our canvas): "FRAME w h" + BE RGB565
+    waitDisplayIdle();
+    static uint16_t row[render::SCREEN];
+    Serial.printf("FRAME %d %d\n", render::SCREEN, render::SCREEN);
+    for (int y = 0; y < render::SCREEN; y++) {
+      M5.Display.readRect(0, y, render::SCREEN, 1, row);
+      for (int x = 0; x < render::SCREEN; x++) row[x] = (uint16_t)((row[x] << 8) | (row[x] >> 8));   // to big-endian like the canvas dump
+      Serial.write((const uint8_t*)row, sizeof row);
+    }
+    Serial.flush();
+  }
   else if (line[0] == 'P') {   // dump the last drawn frame: "FRAME 468 468\n" + raw big-endian RGB565
     waitDisplayIdle();
     M5Canvas& c = canvases[slot ^ 1];
@@ -155,11 +169,22 @@ void App::serialCommands() {
     ui.debugGo(pet_.life == pet::Life::Gone ? scenes::SceneId::Gone : scenes::SceneId::Pet, millis());
     Serial.println("restored");
   }
-  else if (line[0] == 'W' && line[1] == ' ') {   // W <ssid> <password>
+  else if (line[0] == 'W' && line[1] == 'C') { net::Cmd c{}; c.kind = net::Cmd::ClearNetworks; net::post(c); Serial.println("networks cleared"); }
+  else if (line[0] == 'W' && line[1] == ' ') {   // W <ssid> <password>, or W "ssid with spaces" <password>
     net::Cmd c{}; c.kind = net::Cmd::AddNetwork;
-    if (sscanf(line + 2, "%32s %64s", c.text, c.text2) >= 1) { net::post(c); Serial.println("network added"); }
+    char* p = line + 2;
+    for (char* q = p; *q; q++) if (*q == '\r' || *q == '\n') *q = 0;
+    char* end;
+    if (*p == '"' && (end = strchr(p + 1, '"'))) { *end = 0; strncpy(c.text, p + 1, 32); p = end + 1; }
+    else { end = strchr(p, ' '); if (end) *end = 0; strncpy(c.text, p, 32); p = end ? end + 1 : p + strlen(p); }
+    while (*p == ' ') p++;
+    strncpy(c.text2, p, 64);   // the rest of the line is the password (may contain spaces)
+    if (c.text[0]) { net::post(c); Serial.println("network added"); }
   }
-  else if (line[0] == 'N' && (line[1] == 0 || line[1] == '\r')) { for (uint8_t i = 0; i < net::networkCount(); i++) Serial.printf("%u %s\n", i, net::networkName(i)); }
+  else if (line[0] == 'N' && (line[1] == 0 || line[1] == '\r')) {
+    Serial.printf("net status=%d saved=%u\n", (int)net::status(), net::networkCount());
+    for (uint8_t i = 0; i < net::networkCount(); i++) Serial.printf("%u %s\n", i, net::networkName(i));
+  }
   else if (line[0] == 'D' && line[1] == ' ') { net::Cmd c{}; c.kind = net::Cmd::SetToken; strncpy(c.text, line + 2, 64); for (char* p = c.text; *p; p++) if (*p == '\r') *p = 0; net::post(c); Serial.println("token set"); }
   else if (strncmp(line, "R YES", 5) == 0) { pet_ = pet::newPet(now()); st.save(pet_); Serial.println("new pet"); }
   else if (line[0] == 'S') {
@@ -184,7 +209,7 @@ void App::loop() {
   if (f.button == BE::TalkStart) {
     const net::Status st = net::status();
     if (st == net::Status::Online) { net::Cmd c{}; c.kind = net::Cmd::TalkStart; net::post(c); ui.setTalkFace(net::Face::Listening); }
-    else ui.showStatus(st == net::Status::NoWifi || st == net::Status::Connecting ? "NO WIFI" : (st == net::Status::BadToken ? "RE-PAIR ME" : "CAN'T REACH ME"), ms);
+    else ui.showStatus(st == net::Status::NoWifi ? "NO WIFI" : st == net::Status::Connecting ? "CONNECTING..." : (st == net::Status::BadToken ? "RE-PAIR ME" : "CAN'T REACH ME"), ms);
   }
   if (f.button == BE::TalkEnd) { net::Cmd c{}; c.kind = net::Cmd::TalkEnd; net::post(c); ui.setTalkFace(net::Face::Thinking); }
   if (f.button == BE::TalkCancel) { net::Cmd c{}; c.kind = net::Cmd::TalkCancel; net::post(c); ui.setTalkFace(net::Face::Idle); }
