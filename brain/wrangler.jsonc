@@ -1,0 +1,13 @@
+{
+  "name": "charm-brain",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": { "bindings": [{ "name": "PET", "class_name": "Pet" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Pet"] }],
+  "vars": {
+    "REALTIME_MODEL": "gpt-realtime-2.1-mini",
+    "CLAUDE_MODEL": "claude-sonnet-5-5",
+    "TRANSCRIBE_MODEL": "gpt-4o-mini-transcribe"
+  }
+}

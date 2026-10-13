@@ -4,3 +4,6 @@ build/
 .superpowers/
 tools/.venv/
 tests/build/
+brain/node_modules/
+brain/.wrangler/
+brain/.dev.vars
