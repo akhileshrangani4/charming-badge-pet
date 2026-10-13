@@ -1,0 +1,2 @@
+esptool>=4.8,<5
+freetype-py==2.5.1

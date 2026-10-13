@@ -1,3 +1,6 @@
 backups/
 .DS_Store
 build/
+.superpowers/
+tools/.venv/
+tests/build/
