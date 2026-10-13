@@ -78,3 +78,19 @@ TEST_CASE("pressing B shortly after A started still becomes a both-hold, not an 
   }
   CHECK(seen == ButtonEvent::BothHold);
 }
+
+TEST_CASE("a button already held at boot (the wake press) does nothing until released") {
+  ButtonArbiter b(true);   // armed only after every button is seen up once
+  CHECK(run(b, true, false, 0, 2000) == ButtonEvent::None);   // no AHold from the wake press
+  CHECK(b.update(false, false, 2010) == ButtonEvent::None);  // and no AClick on its release
+  CHECK(run(b, true, false, 2100, 2200) == ButtonEvent::None);
+  CHECK(b.update(false, false, 2210) == ButtonEvent::AClick);  // the next press works normally
+}
+
+TEST_CASE("releasing one button restarts the both-hold timer") {
+  ButtonArbiter b;
+  for (uint32_t t = 0; t <= 2000; t += 10) b.update(true, true, t);      // both held 2 s
+  for (uint32_t t = 2010; t <= 3500; t += 10) b.update(true, false, t);  // B let go, A kept
+  CHECK(run(b, true, true, 3510, 6000) == ButtonEvent::None);   // both again for ~2.5 s: not yet
+  CHECK(run(b, true, true, 6010, 6600) == ButtonEvent::BothHold);
+}

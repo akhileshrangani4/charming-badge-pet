@@ -32,6 +32,6 @@ void PowerMgr::sleepNow(uint32_t seconds) {
 #endif
   panel();
   M5.Power.deepSleep((uint64_t)seconds * 1000000ULL, false);
-  for (;;) delay(1000);   // deepSleep does not return; guard in case it refuses
+  esp_restart();   // deepSleep refused (e.g. a wake pin stuck low): restart rather than hang with the panel asleep
 }
 }

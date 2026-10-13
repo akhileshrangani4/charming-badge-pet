@@ -2,9 +2,14 @@
 namespace input {
 ButtonEvent ButtonArbiter::update(bool a, bool b, uint32_t ms) {
   ButtonEvent ev = ButtonEvent::None;
+  if (waitRelease_) {   // swallow the press that woke the badge
+    if (!a && !b) waitRelease_ = false;
+    aDown_ = a; bDown_ = b;
+    return ev;
+  }
   if (a && !aDown_) aT_ = ms;
   if (b && !bDown_) bT_ = ms;
-  if (a && b && !both_) { both_ = true; bothT_ = ms; }
+  if (a && b && (!both_ || !aDown_ || !bDown_)) { both_ = true; bothT_ = ms; }   // (re)start when both become held
   if (both_) {
     if (a && b && !consumed_ && ms - bothT_ >= BOTH_HOLD_MS) { consumed_ = true; ev = ButtonEvent::BothHold; }
   } else if (!consumed_) {

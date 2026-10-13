@@ -29,7 +29,7 @@ class Scenes {
   render::Rect drawn_[2];      // what each canvas last drew
   bool needFull_[2] = {true, true};
   int slot_ = 0;
-  void drawMenu(); void drawStatus(const pet::PetState& s);
+  void drawMenu(); render::Rect drawStatus(const pet::PetState& s);
   M5Canvas* c_; render::TextLayer& t_; render::Mascot& m_;
   SceneId scene_ = SceneId::Pet; MenuItem sel_ = MenuItem::Feed;
   display::Content msg_; char msgTitle_[24] = {0};

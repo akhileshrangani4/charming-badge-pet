@@ -34,6 +34,7 @@ void Scenes::showMessage(const display::Content& k, uint32_t ms) {
 void Scenes::onEvents(uint32_t ev, const pet::PetState& s, uint32_t ms) {
   display::Content k; k.ttlMs = 2500;
   if (ev & pet::EV_RAN_AWAY) { go(SceneId::Gone, ms); return; }
+  if (scene_ == SceneId::Play) return;   // let the round finish; the face still shows the mood
   if (ev & pet::EV_WON_BACK) { k.title = "YOU'RE BACK"; showMessage(k, ms); return; }
   if (ev & pet::EV_AUTO_UNPAUSE) { k.title = "PAUSE OVER"; showMessage(k, ms); return; }
   if (ev & pet::EV_GREW) { k.title = "I GREW!"; showMessage(k, ms); return; }
@@ -128,7 +129,7 @@ void Scenes::drawMenu() {
   }
 }
 
-void Scenes::drawStatus(const pet::PetState& s) {
+Rect Scenes::drawStatus(const pet::PetState& s) {
   const char* names[] = {"FOOD", "ENERGY", "JOY", "CLEAN"};
   const float vals[] = {s.food, s.energy, s.joy, s.hygiene};
   for (int i = 0; i < 4; i++) {
@@ -140,7 +141,7 @@ void Scenes::drawStatus(const pet::PetState& s) {
   }
   char line[32];
   snprintf(line, sizeof line, "DAY %u  %s", (unsigned)(s.ageMin / 1440 + 1), s.sick ? "SICK" : (s.trust < 30 ? "WARY" : "OK"));
-  t_.text(*c_, Font::Mono15, line, 280, DIM);
+  return t_.text(*c_, Font::Mono15, line, 280, DIM).unite(Rect{(int16_t)(CENTER - 92), 80, 184, 190});
 }
 
 Rect Scenes::draw(const pet::PetState& s, uint32_t ms) {
@@ -175,12 +176,14 @@ Rect Scenes::draw(const pet::PetState& s, uint32_t ms) {
     if (s.messes) dirty = dirty.unite(drawMesses(*c_, p, s.messes));
     if (mood == pet::Mood::Hungry && scene_ == SceneId::Pet) dirty = dirty.unite(drawFoodBubble(*c_, p));
     if (scene_ == SceneId::Menu) drawMenu();
-    if (scene_ == SceneId::Status) drawStatus(s);
+    // Text areas count as dirty so they are cleared and pushed with the frame (live status bars, no
+    // anti-aliased text drawn over itself where it meets the mascot's clear area).
+    if (scene_ == SceneId::Status) dirty = dirty.unite(drawStatus(s));
     if (scene_ == SceneId::NameTag) {
       display::Content k; k.label = "HELLO, I'M"; k.title = "AKHILESH"; k.body = "Founding Engineer @Charming";
-      drawContent(*c_, t_, k);
+      dirty = dirty.unite(drawContent(*c_, t_, k));
     }
-    if (scene_ == SceneId::Message) drawContent(*c_, t_, msg_);
+    if (scene_ == SceneId::Message) dirty = dirty.unite(drawContent(*c_, t_, msg_));
     if (scene_ == SceneId::Play) dirty = dirty.unite(play_.drawSparks(*c_));
   }
   // The screen currently shows the other canvas's frame, so the push must cover both.

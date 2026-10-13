@@ -20,7 +20,7 @@ class Input {
   InputFrame poll(uint32_t ms);
 
  private:
-  GestureTracker gesture_; ShakeDetector shake_; ButtonArbiter buttons_;
+  GestureTracker gesture_; ShakeDetector shake_; ButtonArbiter buttons_{true};   // ignore the press that woke the badge
   float gx_ = 0, gy_ = 0;
 };
 }

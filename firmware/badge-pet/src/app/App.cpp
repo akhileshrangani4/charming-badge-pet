@@ -22,8 +22,15 @@ static power::PowerMgr pwr;
 static int64_t debugOffsetMin_ = 0;   // added by the F serial command so every time-gated rule can be tested
 static int64_t cached = -1;
 static uint32_t readMs = 0;
+static int64_t goodMin = -1;      // last good RTC reading, and millis() when it was taken
+static uint32_t goodMs = 0;
 static int64_t now() {
-  if (cached < 0 || millis() - readMs >= 1000) { cached = st.nowMin(); readMs = millis(); }   // RTC is I2C: read at most once a second
+  if (cached < 0 || millis() - readMs >= 1000) {   // RTC is I2C: read at most once a second
+    readMs = millis();
+    cached = st.nowMin();
+    if (cached >= 0) { goodMin = cached; goodMs = readMs; }
+    else if (goodMin >= 0) cached = goodMin + (millis() - goodMs) / 60000;   // RTC read failed: keep time flowing
+  }
   return (cached >= 0 ? cached : pet_.lastMin - debugOffsetMin_) + debugOffsetMin_;
 }
 
@@ -73,7 +80,8 @@ void App::setup() {
   if (!st.load(pet_)) { pet_ = pet::newPet(t); Serial.println("new pet"); }
   const uint32_t ev = pet::catchUp(pet_, t);
   ui.onEvents(ev, pet_, millis());
-  if (const char* p = pet::phraseFor(pet::moodOf(pet_))) { display::Content k; k.title = p; k.ttlMs = 2500; ui.showMessage(k, millis()); }
+  if (ui.current() == scenes::SceneId::Pet)   // don't overwrite an event message from the catch-up
+    if (const char* p = pet::phraseFor(pet::moodOf(pet_))) { display::Content k; k.title = p; k.ttlMs = 2500; ui.showMessage(k, millis()); }
   st.save(pet_);
   lastSaveMs_ = millis();
   pwr.setBeforePanel(waitDisplayIdle);
@@ -102,7 +110,10 @@ void App::serialCommands() {
   const size_t n = Serial.readBytesUntil('\n', line, sizeof line - 1); line[n] = 0;
   pwr.activity(millis());   // a serial session counts as someone using the badge
   int y, mo, d, h, mi, mins;
-  if (sscanf(line, "T %d-%d-%d %d:%d", &y, &mo, &d, &h, &mi) == 5) {
+  if (sscanf(line, "T %d-%d-%d %d:%d", &y, &mo, &d, &h, &mi) == 5 &&
+      !(pet::plausibleYear(y) && mo >= 1 && mo <= 12 && d >= 1 && d <= 31 && h >= 0 && h <= 23 && mi >= 0 && mi <= 59)) {
+    Serial.println("bad time: use T YYYY-MM-DD HH:MM (24 h, year 2025-2099)");
+  } else if (sscanf(line, "T %d-%d-%d %d:%d", &y, &mo, &d, &h, &mi) == 5) {
     st.setClock(y, mo, d, h, mi);
     cached = -1;
     pet::resyncClock(pet_, pet::localMinutes(y, mo, d, h, mi) + debugOffsetMin_);   // correcting the clock is not time passing
